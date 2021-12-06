@@ -1,0 +1,11 @@
+# identifier X Y Z W ... one per line
+# Lines starting with # and blank lines are ignored
+db1 -1097 1162.41 1.24 1
+db2 -1100 1157.41 1.24 1
+db3 -1103 1162.41 1.24 1
+db4 -1106 1157.41 1.24 1
+db5 -1109 1162.41 1.24 1
+
+# comment again
+db6 -1112 1157.41 1.24 1
+
