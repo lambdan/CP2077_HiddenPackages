@@ -1,0 +1,40 @@
+# X Y Z W (space separated)
+# Blank lines or lines starting with # are ignored and can be used for comments etc.
+# W seems to always be 1 but better include it just to be safe...
+# Two decimals seems to be enough for XYZ
+
+# 01 - Middle dock 
+-1095.84 1162.39 1.24 1
+
+# 02 - Flower planter
+-1451.70 1128.32 23.64 1
+
+# 03 - Vics lab
+-1563.02 1258.73 11.50 1
+
+# 04 - Childrens painting
+-1558.74 689.87 9.71 1
+
+# 05 - Corner of Corpo Plaza
+-1382.21 25.88 8.17 1
+
+# 06 - Pipe
+-235.66 -2586.86 39.57 1
+
+# 07 - Rocky Ridge, behind a house
+2580.47 -155.75 81.85 1
+
+# 08 - Rocky Ridge, on a rock
+2955.49 -457.59 109.29 1
+
+# 09 - Little China, corridor down from V's apartment
+-1445.60 1260.99 123.08 1
+
+# 10 - Jackson Plains - corner of broken building
+-1432.29 -5071.18 83.04 1
+
+# 11 Rancho Coronado - behind pharmacy
+436.54 -1436.34 15 1
+
+# 12 Rancho Coronado - center of rollercoaster thingy
+443.57 -1658.97 37.02 1

@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "1.0"
+	version = "0.1"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -10,7 +10,7 @@ local GameHUD = require("Modules/GameHUD.lua")
 local showWindow = false
 local alwaysShowWindow = false
 
-local LocationsFile = "debug.txt"
+local LocationsFile = "packages1.txt" -- used as fallback also
 
 local spawnedEnts = {}
 local spawnedNames = {}
@@ -36,6 +36,7 @@ end)
 
 registerForEvent('onInit', function()
 
+	loadLastUsed()
 	readHPLocations(LocationsFile)
 
 	isLoaded = Game.GetPlayer() and Game.GetPlayer():IsAttached() and not Game.GetSystemRequestsHandler():IsPreGame()
@@ -78,48 +79,61 @@ registerForEvent('onDraw', function()
 	if showWindow or alwaysShowWindow then
 		ImGui.Begin("Hidden Packages")
 
-		if ImGui.Button("Save") then
-			saveData("save.json")
-		end
-		ImGui.SameLine()
-		if ImGui.Button("Load") then 
-			loadSaveData("save.json")
-		end
-
-		if ImGui.Button("Reset/Clean") then
-			reset()
-		end
-
-		ImGui.Separator()
-
-		if ImGui.Button("Dump HP positions") then
-			printHPpos()
-		end
-
-		if ImGui.Button("spawnHPs()") then
-			spawnHPs()
-		end
-
-		if ImGui.Button("destroyAll()") then
-			destroyAll()
-		end
-
-		ImGui.Separator()
-
-		ImGui.Text("Read locations from file:")
+		ImGui.Text("Locations file:")
 		LocationsFile = ImGui.InputText("", LocationsFile, 100)
-		if ImGui.Button("Read") then
+		if ImGui.Button("Load") then
+			reset()
 			readHPLocations(LocationsFile)
+			if not loadSaveData(LocationsFile .. ".save") then
+				spawnHPs()
+			end
+			saveLastUsed()
 		end
 		ImGui.Separator()
 
-		if ImGui.Button("Always show window") then
-			alwaysShowWindow = not alwaysShowWindow
-		end
-		ImGui.SameLine()
-		ImGui.Text(tostring(alwaysShowWindow))
-		ImGui.Separator()
+		--checkIfPlayerAtHP()
 
+		--ImGui.Text("Player at package: " .. playerAtHP)
+
+		-- local s = "Available HPs: "
+		-- for k,v in ipairs(spawnedNames) do
+		-- 	s = s .. v .. ","
+		-- end
+		-- ImGui.Text(s)
+
+		-- local s = "Collected HPs: "
+		-- for k,v in ipairs(collectedNames) do
+		-- 	s = s .. v .. ","
+		-- end
+		-- ImGui.Text(s)
+
+		ImGui.Text("Collected: " .. tostring(tableLen(collectedNames)) .. "/" .. tostring(tableLen(HiddenPackagesLocations)))
+
+		--ImGui.Text("isLoaded:" .. tostring(isLoaded))
+
+		--ImGui.Text("inVehicle: " .. tostring(inVehicle()))
+
+		if tableLen(collectedNames) < tableLen(HiddenPackagesLocations) then
+			if ImGui.Button("Give me a hint...")  then
+				for k,v in ipairs(HiddenPackagesLocations) do
+					if has_value(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
+						placeMapPin(v["x"], v["y"], v["z"], v["w"])
+						break -- only place one
+					end
+				end
+			end
+			if ImGui.Button("Give me ALL the hints!")  then
+				for k,v in ipairs(HiddenPackagesLocations) do
+					if has_value(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
+						placeMapPin(v["x"], v["y"], v["z"], v["w"])
+					end
+				end
+			end
+		else
+			ImGui.Text("You got them all!")
+		end
+
+		ImGui.Separator()
 		ImGui.Text("Player Pos:")
 		if isLoaded then
 			local gps = Game.GetPlayer():GetWorldPosition()
@@ -133,40 +147,31 @@ registerForEvent('onDraw', function()
 			ImGui.Text("Z: " .. tostring(position["z"]))
 			ImGui.Text("W: " .. tostring(position["w"]))
 		else
-			ImGui.Text("Not in-game")
+			ImGui.Text("(Not in-game)")
 		end
+
 		ImGui.Separator()
-		--checkIfPlayerAtHP()
-
-		ImGui.Text("PLAYER AT HP: " .. playerAtHP)
-
-		local s = "Available HPs: "
-		for k,v in ipairs(spawnedNames) do
-			s = s .. v .. ","
+		if ImGui.Button("Always show this window") then
+			alwaysShowWindow = not alwaysShowWindow
 		end
-		ImGui.Text(s)
+		ImGui.SameLine()
+		ImGui.Text(tostring(alwaysShowWindow))
 
-		local s = "Collected HPs: "
-		for k,v in ipairs(collectedNames) do
-			s = s .. v .. ","
+		ImGui.Text("Scary buttons:")
+		
+		if ImGui.Button("Delete save for\n" .. LocationsFile) then
+			deleteSave()
 		end
-		ImGui.Text(s)
 
-		ImGui.Text("Collected: " .. tostring(tableLen(collectedNames)) .. "/" .. tostring(tableLen(HiddenPackagesLocations)))
-
-		ImGui.Text("isLoaded:" .. tostring(isLoaded))
-
-		ImGui.Text("inVehicle: " .. tostring(inVehicle()))
-
-		if ImGui.Button("Give me a hint...")  then
-			for k,v in ipairs(HiddenPackagesLocations) do
-				if has_value(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
-					placeMapPin(v["x"], v["y"], v["z"], v["w"])
-					break -- only place one
-
-				end
-			end
-	end
+		if ImGui.Button("reset()") then
+			reset()
+		end
+		if ImGui.Button("spawnHPs()") then
+			spawnHPs()
+		end
+		if ImGui.Button("destroyAll()") then
+			destroyAll()
+		end
 
 		ImGui.End()
 	end
@@ -379,13 +384,11 @@ function file_exists(filename) -- https://stackoverflow.com/a/4991602
 end
 
 function reset()
-	print("reset()")
 	destroyAll()
 	collectedNames = {}
 end
 
 function destroyAll()
-	print("destroyAll()")
 	for k,v in ipairs(spawnedEnts) do
 		destroyObject(v)
 	end
@@ -397,10 +400,10 @@ end
 
 function readHPLocations(filename)
 	if not file_exists(filename) then
-		print("Hidden Packages: faield to load " .. filename)
+		print("Hidden Packages: failed to load " .. filename)
 		return false
 	end
-	print("Reading " .. filename)
+	print("Reading HP locations from " .. filename)
 
 	HiddenPackagesLocations = {}
 	lines = {}
@@ -448,7 +451,7 @@ end
 --     Game.GetMappinSystem():RegisterMappin(mappinData, position)
 -- end)
 
-function inVehicle() -- stolen from AdaptiveGraphicsQuality (https://www.nexusmods.com/cyberpunk2077/mods/2920)
+function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/cyberpunk2077/mods/2920)
 	local ws = Game.GetWorkspotSystem()
 	local player = Game.GetPlayer()
 	if ws and player then
@@ -473,4 +476,64 @@ function placeMapPin(x,y,z,w)
 	position.w = w
 
 	Game.GetMappinSystem():RegisterMappin(mappinData, position)
+end
+
+function saveLastUsed()
+	local file = io.open("LAST_USED", "w")
+	file:write(LocationsFile)
+	file:close()
+end
+
+function checkLastUsed()
+	if not file_exists("LAST_USED") then
+		print("Hidden Packages: no last used found")
+		return false
+	end
+
+	local file = io.open("LAST_USED","r")
+	local j = file:read("*a")
+	file:close()
+
+	return j
+
+end
+
+
+function saveLastUsed()
+	data = {
+		last_used = LocationsFile
+	}
+	local file = io.open("LAST_USED", "w")
+	local j = json.encode(data)
+	file:write(j)
+	file:close()
+end
+
+function loadLastUsed()
+	if not file_exists("LAST_USED") then
+		print("Hidden Packages: no last used found")
+		return false
+	end
+
+	local file = io.open("LAST_USED","r")
+	local j = json.decode(file:read("*a"))
+	file:close()
+
+	LocationsFile = j["last_used"]
+	print("Hidden Packages: loaded last used: " .. j["last_used"])
+	return true
+end
+
+function deleteSave()
+	filename = LocationsFile .. ".save"
+	if not file_exists(filename) then
+		return false
+	end
+
+	if os.remove(filename) then
+		print("Deleted", filename)
+		return true
+	else
+		return false
+	end
 end
