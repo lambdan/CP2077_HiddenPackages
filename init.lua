@@ -22,6 +22,8 @@ local HiddenPackagesLocations = {}
 
 local isLoaded = false
 
+local propPath = "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent" -- spinning red arasaka logo
+local propZboost = 0.5 -- arasaka logo is kinda low so boost it upwards a little
 
 registerForEvent("onOverlayOpen", function()
 	showWindow = true
@@ -35,6 +37,8 @@ end)
 registerForEvent('onInit', function()
 
 	readHPLocations(LocationsFile)
+
+	isLoaded = Game.GetPlayer() and Game.GetPlayer():IsAttached() and not Game.GetSystemRequestsHandler():IsPreGame()
 
 	GameSession.OnSave(function()
 		saveData(LocationsFile .. ".save")
@@ -152,6 +156,18 @@ registerForEvent('onDraw', function()
 
 		ImGui.Text("isLoaded:" .. tostring(isLoaded))
 
+		ImGui.Text("inVehicle: " .. tostring(inVehicle()))
+
+		if ImGui.Button("Give me a hint...")  then
+			for k,v in ipairs(HiddenPackagesLocations) do
+				if has_value(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
+					placeMapPin(v["x"], v["y"], v["z"], v["w"])
+					break -- only place one
+
+				end
+			end
+	end
+
 		ImGui.End()
 	end
 
@@ -195,13 +211,11 @@ function spawnObjectAtPos(x,y,z,w)
     local pos = Game.GetPlayer():GetWorldPosition()
     pos.x = x
     pos.y = y
-    pos.z = z
+    pos.z = z + propZboost
     pos.w = w
     transform:SetPosition(pos)
 
-    --local rID = WorldFunctionalTests.SpawnEntity("base\\quest\\main_quests\\prologue\\q000\\entities\\q000_invisible_radio.ent", transform, '')
-    --table.insert(logic.radios, rID)
-    local ID = WorldFunctionalTests.SpawnEntity("base\\environment\\decoration\\containers\\baskets\\laundry_basket\\laundry_basket_a_full_a_dst.ent", transform, '')
+    local ID = WorldFunctionalTests.SpawnEntity(propPath, transform, '')
     print("Object spawned ID: " .. tostring(ID))
     return ID
 end
@@ -215,10 +229,12 @@ function checkIfPlayerAtHP()
 	local atHP = false
 
 	for k,v in ipairs(HiddenPackagesLocations) do
-		if isPlayerAtPos(v["x"], v["y"], v["z"], v["w"]) then
+		if isPlayerAtPos(v["x"], v["y"], (v["z"] + propZboost), v["w"]) then
 			atHP = true
 			playerAtHP =  "Yes: " .. v["id"]
-			collectHP(v["id"])
+			if not inVehicle() then
+				collectHP(v["id"])
+			end
 		end
 	end
 
@@ -244,9 +260,9 @@ end
 function destroyObject(e)
 	if Game.FindEntityByID(e) ~= nil then
         Game.FindEntityByID(e):GetEntity():Destroy()
-        print("Destroyed object: ", e)
+        --print("Destroyed object: ", e)
     else
-    	print("NOT DESTROYED OBJECT (nil): ", e)
+    	--print("NOT DESTROYED OBJECT (nil): ", e)
     end
 end
 
@@ -273,7 +289,7 @@ function collectHP(name)
 	-- find ent and destroy it
 	for k,v in ipairs(spawnedNames) do
 		if v == name then
-			print("Destroying", name)
+			--print("Destroying", name)
 			entity = spawnedEnts[k]
 			destroyObject(entity)
 			table.remove(spawnedEnts, k)
@@ -419,3 +435,42 @@ end
 --     shardUIevent.text = text
 --     Game.GetUISystem():QueueEvent(shardUIevent)
 -- end
+
+-- custom map pin
+-- registerHotkey('PlaceCustomMapPin', 'Place a map pin at player\'s position', function()
+--     local mappinData = MappinData.new()
+--     mappinData.mappinType = TweakDBID.new('Mappins.DefaultStaticMappin')
+--     mappinData.variant = gamedataMappinVariant.FastTravelVariant
+--     mappinData.visibleThroughWalls = true
+    
+--     local position = Game.GetPlayer():GetWorldPosition()
+    
+--     Game.GetMappinSystem():RegisterMappin(mappinData, position)
+-- end)
+
+function inVehicle() -- stolen from AdaptiveGraphicsQuality (https://www.nexusmods.com/cyberpunk2077/mods/2920)
+	local ws = Game.GetWorkspotSystem()
+	local player = Game.GetPlayer()
+	if ws and player then
+		local info = ws:GetExtendedInfo(player)
+		if info then
+			return ws:IsActorInWorkspot(player)
+				and not not Game['GetMountedVehicle;GameObject'](Game.GetPlayer())
+		end
+	end
+end
+
+function placeMapPin(x,y,z,w)
+	local mappinData = MappinData.new()
+	mappinData.mappinType = TweakDBID.new('Mappins.DefaultStaticMappin')
+	mappinData.variant = gamedataMappinVariant.CustomPositionVariant
+	mappinData.visibleThroughWalls = true   
+
+	local position = Game.GetPlayer():GetWorldPosition()
+	position.x = x
+	position.y = y
+	position.z = z + propZboost
+	position.w = w
+
+	Game.GetMappinSystem():RegisterMappin(mappinData, position)
+end
