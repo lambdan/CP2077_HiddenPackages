@@ -7,91 +7,71 @@ local GameSession = require("Modules/GameSession.lua")
 local GameUI = require("Modules/GameUI.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 
-local showSettings = false
+local showWindow = false
+local alwaysShowWindow = false
+
+local LocationsFile = "debug.txt"
 
 local spawnedEnts = {}
 local spawnedNames = {}
 local collectedNames = {}
 
-local playerAtHP = "..."
+local playerAtHP = "No"
 
 local HiddenPackagesLocations = {}
 
-function getPlayerPos()
+local isLoaded = false
 
-	local gps = Game.GetPlayer():GetWorldPosition() -- returns a ToVector4...
-	local position = {} -- ... so we'll convert into a traditional table
-	position["x"] = gps["x"]
-	position["y"] = gps["y"]
-	position["z"] = gps["z"]
-	position["w"] = gps["w"]
-
-	print("GPS: ", gps)
-	print(position["x"])
-	print(position["y"])
-	print(position["z"])
-	print(position["w"])
-
-	return {position}
-end
-
-function printHPpos()
-	for k,v in ipairs(HiddenPackagesLocations) do
-		print("--- HP " .. k .. " ---")
-		for a,b in pairs(v) do
-			print(a,b)
-		end
-		print("------")
-	end
-end
-
-function spawnObjectAtPos(x,y,z,w)
-    local transform = Game.GetPlayer():GetWorldTransform()
-    local pos = Game.GetPlayer():GetWorldPosition()
-    pos.x = x
-    pos.y = y
-    pos.z = z
-    pos.w = w
-    transform:SetPosition(pos)
-
-    --local rID = WorldFunctionalTests.SpawnEntity("base\\quest\\main_quests\\prologue\\q000\\entities\\q000_invisible_radio.ent", transform, '')
-    --table.insert(logic.radios, rID)
-    local ID = WorldFunctionalTests.SpawnEntity("base\\environment\\decoration\\containers\\baskets\\laundry_basket\\laundry_basket_a_full_a_dst.ent", transform, '')
-    print("Object spawned ID: " .. tostring(ID))
-    return ID
-end
 
 registerForEvent("onOverlayOpen", function()
-	showSettings = true
+	showWindow = true
 end)
 
 registerForEvent("onOverlayClose", function()
-	showSettings = false
+	showWindow = false
 end)
 
 
 registerForEvent('onInit', function()
 
-	--GameSession.OnSave(function()
-		--saveData("collected_packages.json")
-	--end)
+	readHPLocations(LocationsFile)
 
-	--GameSession.OnLoad(function()
-	--	reset()
-	--end)
+	GameSession.OnSave(function()
+		saveData(LocationsFile .. ".save")
+	end)
 
-	--Observe('NPCPuppet', 'SendAfterDeathOrDefeatEvent', function(self)
-	--	if self.shouldDie and (IsPlayer(self.myKiller) or self.wasJustKilledOrDefeated) then
-	--		local WhatWeKilled = GetInfo(self)
-	--		gotKill(WhatWeKilled)
-	--	end
-	--end)
+	GameSession.OnLoad(function()
+		reset()
+		loadSaveData(LocationsFile .. ".save")
+	end)
+
+    Observe('PlayerPuppet', 'OnAction', function(action) -- any player action
+        checkIfPlayerAtHP()
+    end)
+
+	Observe('QuestTrackerGameController', 'OnInitialize', function()
+	    if not isLoaded then
+	        --print('Game Session Started')
+	        isLoaded = true
+
+	        if not loadSaveData(LocationsFile .. ".save") then
+	        	spawnHPs() -- no save so just spawn them
+	        end
+	    end
+	end)
+
+	Observe('QuestTrackerGameController', 'OnUninitialize', function()
+	    if Game.GetPlayer() == nil then
+	        --print('Game Session Ended')
+	        isLoaded = false
+	        reset() -- destory all objects and reset tables etc
+	    end
+	end)
 end)
 
 registerForEvent('onDraw', function()
 
-	--if showSettings then
-	if 1 == 1 then
+	if showWindow or alwaysShowWindow then
 		ImGui.Begin("Hidden Packages")
 
 		if ImGui.Button("Save") then
@@ -122,30 +102,37 @@ registerForEvent('onDraw', function()
 
 		ImGui.Separator()
 
-		ImGui.Text("Read locations:")
-
-		if ImGui.Button("debugging.txt") then
-			readHPLocations("debugging.txt")
+		ImGui.Text("Read locations from file:")
+		LocationsFile = ImGui.InputText("", LocationsFile, 100)
+		if ImGui.Button("Read") then
+			readHPLocations(LocationsFile)
 		end
-
-		if ImGui.Button("debugging2.txt") then
-			readHPLocations("debugging2.txt")
-		end
-
 		ImGui.Separator()
 
-		local gps = Game.GetPlayer():GetWorldPosition()
-		local position = {} -- ... so we'll convert into a traditional table
-		position["x"] = gps["x"]
-		position["y"] = gps["y"]
-		position["z"] = gps["z"]
-		position["w"] = gps["w"]
-		ImGui.Text("X: " .. tostring(position["x"]))
-		ImGui.Text("Y: " .. tostring(position["y"]))
-		ImGui.Text("Z: " .. tostring(position["z"]))
-		ImGui.Text("W: " .. tostring(position["w"]))
+		if ImGui.Button("Always show window") then
+			alwaysShowWindow = not alwaysShowWindow
+		end
+		ImGui.SameLine()
+		ImGui.Text(tostring(alwaysShowWindow))
+		ImGui.Separator()
 
-		checkIfPlayerAtHP()
+		ImGui.Text("Player Pos:")
+		if isLoaded then
+			local gps = Game.GetPlayer():GetWorldPosition()
+			local position = {} -- ... so we'll convert into a traditional table
+			position["x"] = gps["x"]
+			position["y"] = gps["y"]
+			position["z"] = gps["z"]
+			position["w"] = gps["w"]
+			ImGui.Text("X: " .. tostring(position["x"]))
+			ImGui.Text("Y: " .. tostring(position["y"]))
+			ImGui.Text("Z: " .. tostring(position["z"]))
+			ImGui.Text("W: " .. tostring(position["w"]))
+		else
+			ImGui.Text("Not in-game")
+		end
+		ImGui.Separator()
+		--checkIfPlayerAtHP()
 
 		ImGui.Text("PLAYER AT HP: " .. playerAtHP)
 
@@ -155,27 +142,88 @@ registerForEvent('onDraw', function()
 		end
 		ImGui.Text(s)
 
-		ImGui.Text(tostring(tableLen(collectedNames)) .. "/" .. tostring(tableLen(HiddenPackagesLocations)))
+		local s = "Collected HPs: "
+		for k,v in ipairs(collectedNames) do
+			s = s .. v .. ","
+		end
+		ImGui.Text(s)
 
+		ImGui.Text("Collected: " .. tostring(tableLen(collectedNames)) .. "/" .. tostring(tableLen(HiddenPackagesLocations)))
+
+		ImGui.Text("isLoaded:" .. tostring(isLoaded))
 
 		ImGui.End()
 	end
 
 end)
 
+
+function getPlayerPos()
+
+	local gps = Game.GetPlayer():GetWorldPosition() -- returns a ToVector4...
+	local position = {} -- ... so we'll convert into a traditional table
+	position["x"] = gps["x"]
+	position["y"] = gps["y"]
+	position["z"] = gps["z"]
+	position["w"] = gps["w"]
+
+	print("GPS: ", gps)
+	print(position["x"])
+	print(position["y"])
+	print(position["z"])
+	print(position["w"])
+
+	return {position}
+end
+
+function printHPpos()
+	for k,v in ipairs(HiddenPackagesLocations) do
+		print("--- HP " .. k .. " ---")
+		for a,b in pairs(v) do
+			print(a,b)
+		end
+		print("------")
+	end
+end
+
+function spawnObjectAtPos(x,y,z,w)
+	if not isLoaded then
+		return
+	end
+
+    local transform = Game.GetPlayer():GetWorldTransform()
+    local pos = Game.GetPlayer():GetWorldPosition()
+    pos.x = x
+    pos.y = y
+    pos.z = z
+    pos.w = w
+    transform:SetPosition(pos)
+
+    --local rID = WorldFunctionalTests.SpawnEntity("base\\quest\\main_quests\\prologue\\q000\\entities\\q000_invisible_radio.ent", transform, '')
+    --table.insert(logic.radios, rID)
+    local ID = WorldFunctionalTests.SpawnEntity("base\\environment\\decoration\\containers\\baskets\\laundry_basket\\laundry_basket_a_full_a_dst.ent", transform, '')
+    print("Object spawned ID: " .. tostring(ID))
+    return ID
+end
+
+
 function checkIfPlayerAtHP()
+	if not isLoaded then
+		return
+	end
+
 	local atHP = false
 
 	for k,v in ipairs(HiddenPackagesLocations) do
 		if isPlayerAtPos(v["x"], v["y"], v["z"], v["w"]) then
 			atHP = true
-			playerAtHP =  v["id"] .. " !!!"
+			playerAtHP =  "Yes: " .. v["id"]
 			collectHP(v["id"])
 		end
 	end
 
 	if atHP == false then
-		playerAtHP = "..."
+		playerAtHP = "No"
 	end
 end
 
@@ -205,7 +253,7 @@ end
 function spawnHPs()
 	for k,v in ipairs(HiddenPackagesLocations) do
 
-		if has_value(collectedNames, v["id"]) == false then
+		if has_value(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it --> dont spawn it
 
 			local entID = spawnObjectAtPos(v["x"], v["y"], v["z"], v["w"])
 			table.insert(spawnedEnts, entID)
@@ -234,8 +282,15 @@ function collectHP(name)
         end
     end
 
-    local msg = "Hidden Package " .. tostring(tableLen(collectedNames)) .. " of " .. tostring(tableLen(HiddenPackagesLocations))
-    GameHUD.ShowMessage(msg)
+    if tableLen(collectedNames) == tableLen(HiddenPackagesLocations) then
+    	-- got em all
+    	local msg = "All Hidden Packages collected!" -- VC message
+    	GameHUD.ShowWarning(msg)
+    else
+    	local msg = "Hidden Package " .. tostring(tableLen(collectedNames)) .. " of " .. tostring(tableLen(HiddenPackagesLocations))
+    	GameHUD.ShowWarning(msg)
+    end
+
 end
 
 
@@ -259,7 +314,7 @@ end
 function saveData(filename)
 	if tableLen(collectedNames) == 0 then
 		print("Hidden Packages: nothing to save?")
-		return -- nothing to save
+		return false -- nothing to save
 	end
 
 	-- convert table to string
@@ -277,6 +332,7 @@ function saveData(filename)
 	file:write(j)
 	file:close()
 	print("Hidden Packages: saved to " .. filename)
+	return true
 end
 
 function loadSaveData(filename)
@@ -298,6 +354,7 @@ function loadSaveData(filename)
 	destroyAll()
 	spawnHPs()
 	print("Hidden Packages: loaded " .. filename)
+	return true
 end
 
 function file_exists(filename) -- https://stackoverflow.com/a/4991602
@@ -327,6 +384,7 @@ function readHPLocations(filename)
 		print("Hidden Packages: faield to load " .. filename)
 		return false
 	end
+	print("Reading " .. filename)
 
 	HiddenPackagesLocations = {}
 	lines = {}
@@ -343,21 +401,21 @@ function readHPLocations(filename)
 		end
 
 		local hp = {}
-		hp["id"] = vals[1]
-		hp["x"] = tonumber(vals[2])
-		hp["y"] = tonumber(vals[3])
-		hp["z"] = tonumber(vals[4])
-		hp["w"] = tonumber(vals[5])
-
+		hp["id"] = "hp" .. tostring(k)
+		hp["x"] = tonumber(vals[1])
+		hp["y"] = tonumber(vals[2])
+		hp["z"] = tonumber(vals[3])
+		hp["w"] = tonumber(vals[4])
 		table.insert(HiddenPackagesLocations, hp)
 	end
 
 	print("Loaded " .. filename)
 end
 
-
--- TODO
--- save file name based on which locations txt you use (eg debugging.txt -> debugging.txt.save.json)
--- 100 good locations! and a map for them!
--- more testing... this has gone way too smooth. seems to go crazy if you dont restart game if you reload stuff a bunch of times.
--- make sister mod that just spits out locations to a txt so you can easily make locations
+-- from CET Snippets discord... could be useful
+-- function showCustomShardPopup(titel, text)
+--     shardUIevent = NotifyShardRead.new()
+--     shardUIevent.title = titel
+--     shardUIevent.text = text
+--     Game.GetUISystem():QueueEvent(shardUIevent)
+-- end
