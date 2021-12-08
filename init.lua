@@ -15,19 +15,21 @@ local propPath = "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/
 local propZboost = 0.5 -- arasaka logo is kinda low so boost it upwards a little
 
 -- inits
-local spawnedEnts = {}
-local spawnedNames = {}
-local collectedNames = {}
-local playerAtHP = "No"
-local HiddenPackagesLocations = {}
-local isLoaded = false
-local newLocationsFile = LocationsFile
+local spawnedEnts = {} -- prop ids for the spawned packages
+local spawnedNames = {} -- names of the spawned packages
+local collectedNames = {} -- names of collected packages
+local activeMappins = {} -- object ids for map pins
+local HiddenPackagesLocations = {} -- locations loaded from file
 
-registerHotkey("hp_place_waypoint", "Place waypoint to package", function()
+local isLoaded = false
+local newLocationsFile = LocationsFile -- used for text field
+
+
+registerHotkey("hp_place_waypoint", "Waypoint to next package", function()
 	for k,v in ipairs(HiddenPackagesLocations) do
 		if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
-			placeMapPin(v["x"], v["y"], v["z"], v["w"])
-			GameHUD.ShowMessage("Hidden Package marked on map")
+			activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
+			GameHUD.ShowMessage("\"Hidden\" Package marked") -- not very hidden when you have a waypoint to it ;)
 			break -- only place one
 		end
 	end
@@ -91,32 +93,13 @@ registerForEvent('onDraw', function()
 	if showWindow or alwaysShowWindow then
 		ImGui.Begin("Hidden Packages")
 
-
-		--ImGui.Text("Player at package: " .. playerAtHP)
-
-		-- local s = "Available HPs: "
-		-- for k,v in ipairs(spawnedNames) do
-		-- 	s = s .. v .. ","
-		-- end
-		-- ImGui.Text(s)
-
-		-- local s = "Collected HPs: "
-		-- for k,v in ipairs(collectedNames) do
-		-- 	s = s .. v .. ","
-		-- end
-		-- ImGui.Text(s)
-
 		ImGui.Text("Collected: " .. tostring(tableLen(collectedNames)) .. "/" .. tostring(tableLen(HiddenPackagesLocations)) .. " (" .. LocationsFile .. ")")
-
-		--ImGui.Text("isLoaded:" .. tostring(isLoaded))
-
-		--ImGui.Text("inVehicle: " .. tostring(inVehicle()))
 
 		if tableLen(collectedNames) < tableLen(HiddenPackagesLocations) then
 			if ImGui.Button("Place waypoint to a package")  then
 				for k,v in ipairs(HiddenPackagesLocations) do
 					if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
-						placeMapPin(v["x"], v["y"], v["z"], v["w"])
+						activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
 						break -- only place one
 					end
 				end
@@ -124,7 +107,7 @@ registerForEvent('onDraw', function()
 			if ImGui.Button("Place waypoints to ALL packages")  then
 				for k,v in ipairs(HiddenPackagesLocations) do
 					if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
-						placeMapPin(v["x"], v["y"], v["z"], v["w"])
+						activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
 					end
 				end
 			end
@@ -247,7 +230,7 @@ registerForEvent('onDraw', function()
 			spawnHPs()
 			print("HP Randomizer done")
 		end
-		ImGui.Text("Random packages are very likely to appear in unreachable areas")
+		ImGui.Text("Random packages are very likely to appear in unreachable areas.\nUseful for testing only... unless you really want to go insane")
 
 		ImGui.End()
 	end
@@ -312,16 +295,12 @@ function checkIfPlayerAtHP()
 	for k,v in ipairs(HiddenPackagesLocations) do
 		if isPlayerAtPos(v["x"], v["y"], (v["z"] + propZboost), v["w"]) then
 			atHP = true
-			playerAtHP =  "Yes: " .. v["id"]
 			if not inVehicle() then -- only allow picking them up on foot (like in the GTA games)
 				collectHP(v["id"])
 			end
 		end
 	end
 
-	if atHP == false then
-		playerAtHP = "No"
-	end
 end
 
 function isPlayerAtPos(x,y,z,w)
@@ -355,13 +334,14 @@ function spawnHPs()
 			local entID = spawnObjectAtPos(v["x"], v["y"], v["z"], v["w"])
 			table.insert(spawnedEnts, entID)
 			table.insert(spawnedNames, v["id"])
+			activeMappins[k] = false
 			print("Hidden Packages: spawned package ", v["id"])
 
 		end
 	end
 end
 
-function collectHP(name)
+function collectHP(name) -- name is more like packageID
 	if tableHasValue(spawnedNames, name) == false then -- check if HP is NOT spawned and if so dont allow picking it up
 		return
 	end
@@ -375,6 +355,19 @@ function collectHP(name)
 			table.remove(spawnedEnts, k)
 			table.remove(spawnedNames, k)
 			table.insert(collectedNames, name)
+			
+			-- unregister mappin and remove it
+			-- k is not usable here as mappins use HiddenPackageLocations index
+			for k2,v2 in ipairs(HiddenPackagesLocations) do
+				if v2["id"] == name then
+					if activeMappins[k2] then
+						Game.GetMappinSystem():UnregisterMappin(activeMappins[k2])
+					end
+					activeMappins[k2] = false
+					break
+				end
+			end
+
 			break
         end
     end
@@ -543,7 +536,7 @@ function placeMapPin(x,y,z,w) -- from CET Snippets discord
 	position.z = z + propZboost
 	position.w = w
 
-	Game.GetMappinSystem():RegisterMappin(mappinData, position)
+	return Game.GetMappinSystem():RegisterMappin(mappinData, position) -- returns ID 
 end
 
 function saveLastUsed()
@@ -567,6 +560,7 @@ function loadLastUsed()
 	file:close()
 
 	LocationsFile = j["last_used"]
+	newLocationsFile = LocationsFile
 	print("Hidden Packages: loaded last used: " .. j["last_used"])
 	return true
 end
