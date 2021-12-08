@@ -11,19 +11,27 @@ local showWindow = false
 local alwaysShowWindow = false
 
 local LocationsFile = "packages1.txt" -- used as fallback also
+local propPath = "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent" -- spinning red arasaka logo
+local propZboost = 0.5 -- arasaka logo is kinda low so boost it upwards a little
 
+-- inits
 local spawnedEnts = {}
 local spawnedNames = {}
 local collectedNames = {}
-
 local playerAtHP = "No"
-
 local HiddenPackagesLocations = {}
-
 local isLoaded = false
+local newLocationsFile = LocationsFile
 
-local propPath = "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent" -- spinning red arasaka logo
-local propZboost = 0.5 -- arasaka logo is kinda low so boost it upwards a little
+registerHotkey("hp_place_waypoint", "Place waypoint to package", function()
+	for k,v in ipairs(HiddenPackagesLocations) do
+		if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
+			placeMapPin(v["x"], v["y"], v["z"], v["w"])
+			GameHUD.ShowMessage("Hidden Package marked on map")
+			break -- only place one
+		end
+	end
+end)
 
 registerForEvent("onOverlayOpen", function()
 	showWindow = true
@@ -36,7 +44,7 @@ end)
 
 registerForEvent('onInit', function()
 
-	loadLastUsed()
+	loadLastUsed() -- try to load last used locations file, otherwise it will fallback to what is set above
 	readHPLocations(LocationsFile)
 
 	isLoaded = Game.GetPlayer() and Game.GetPlayer():IsAttached() and not Game.GetSystemRequestsHandler():IsPreGame()
@@ -48,6 +56,10 @@ registerForEvent('onInit', function()
 	GameSession.OnLoad(function()
 		reset()
 		loadSaveData(LocationsFile .. ".save")
+	end)
+
+	Observe('PlayerPuppet', 'OnDeath', function()
+  		reset()
 	end)
 
     Observe('PlayerPuppet', 'OnAction', function(action) -- any player action
@@ -79,19 +91,6 @@ registerForEvent('onDraw', function()
 	if showWindow or alwaysShowWindow then
 		ImGui.Begin("Hidden Packages")
 
-		ImGui.Text("Locations file:")
-		LocationsFile = ImGui.InputText("", LocationsFile, 100)
-		if ImGui.Button("Load") then
-			reset()
-			readHPLocations(LocationsFile)
-			if not loadSaveData(LocationsFile .. ".save") then
-				spawnHPs()
-			end
-			saveLastUsed()
-		end
-		ImGui.Separator()
-
-		--checkIfPlayerAtHP()
 
 		--ImGui.Text("Player at package: " .. playerAtHP)
 
@@ -107,34 +106,53 @@ registerForEvent('onDraw', function()
 		-- end
 		-- ImGui.Text(s)
 
-		ImGui.Text("Collected: " .. tostring(tableLen(collectedNames)) .. "/" .. tostring(tableLen(HiddenPackagesLocations)))
+		ImGui.Text("Collected: " .. tostring(tableLen(collectedNames)) .. "/" .. tostring(tableLen(HiddenPackagesLocations)) .. " (" .. LocationsFile .. ")")
 
 		--ImGui.Text("isLoaded:" .. tostring(isLoaded))
 
 		--ImGui.Text("inVehicle: " .. tostring(inVehicle()))
 
 		if tableLen(collectedNames) < tableLen(HiddenPackagesLocations) then
-			if ImGui.Button("Give me a hint...")  then
+			if ImGui.Button("Place waypoint to a package")  then
 				for k,v in ipairs(HiddenPackagesLocations) do
-					if has_value(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
+					if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
 						placeMapPin(v["x"], v["y"], v["z"], v["w"])
 						break -- only place one
 					end
 				end
 			end
-			if ImGui.Button("Give me ALL the hints!")  then
+			if ImGui.Button("Place waypoints to ALL packages")  then
 				for k,v in ipairs(HiddenPackagesLocations) do
-					if has_value(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
+					if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
 						placeMapPin(v["x"], v["y"], v["z"], v["w"])
 					end
 				end
 			end
+
+			ImGui.Text("NOTE: Waypoints tend to be buggy and not disappear.\nReloading save should fix it.")
 		else
 			ImGui.Text("You got them all!")
 		end
 
 		ImGui.Separator()
-		ImGui.Text("Player Pos:")
+		ImGui.Text("Load new locations file:")
+		newLocationsFile = ImGui.InputText("", newLocationsFile, 50)
+		if ImGui.Button("Load") then
+			if file_exists(newLocationsFile) then
+				LocationsFile = newLocationsFile
+				reset()
+				readHPLocations(LocationsFile)
+				if not loadSaveData(LocationsFile .. ".save") then
+					spawnHPs()
+				end
+				saveLastUsed()
+			else
+				print("Hidden Packages ERROR: file " .. newLocationsFile .. " did not exist?")
+			end
+		end
+		ImGui.Separator()
+
+		ImGui.Text("Player Position:")
 		if isLoaded then
 			local gps = Game.GetPlayer():GetWorldPosition()
 			local position = {} -- ... so we'll convert into a traditional table
@@ -150,17 +168,19 @@ registerForEvent('onDraw', function()
 			ImGui.Text("(Not in-game)")
 		end
 
-		ImGui.Separator()
 		if ImGui.Button("Always show this window") then
 			alwaysShowWindow = not alwaysShowWindow
 		end
 		ImGui.SameLine()
 		ImGui.Text(tostring(alwaysShowWindow))
 
-		ImGui.Text("Scary buttons:")
+		ImGui.Text("")
+		ImGui.Text(" - Scary buttons - ")
 		
-		if ImGui.Button("Delete save for\n" .. LocationsFile) then
+		if ImGui.Button("Delete save & reset progress\n(" .. LocationsFile .. ")") then
 			deleteSave()
+			reset()
+			spawnHPs()
 		end
 
 		if ImGui.Button("reset()") then
@@ -172,6 +192,62 @@ registerForEvent('onDraw', function()
 		if ImGui.Button("destroyAll()") then
 			destroyAll()
 		end
+		if ImGui.Button("printAllHPs()") then
+			printAllHPs()
+		end
+
+		
+		-- randomizers
+		ImGui.Text("")
+		ImGui.Text(" - Randomizers - ")
+		if ImGui.Button("Randomizer (1 package)") then
+			LocationsFile = "RANDOM"
+			reset()
+			generateRandomPackages(1)
+			spawnHPs()
+			print("HP Randomizer done")
+		end
+
+		if ImGui.Button("Randomizer (10 packages)") then
+			LocationsFile = "RANDOM"
+			reset()
+			generateRandomPackages(10)
+			spawnHPs()
+			print("HP Randomizer done")
+		end
+
+		if ImGui.Button("Randomizer (100 packages)") then
+			LocationsFile = "RANDOM"
+			reset()
+			generateRandomPackages(100)
+			spawnHPs()
+			print("HP Randomizer done")
+		end
+
+		if ImGui.Button("Randomizer (1000 packages) (game will be laggy)") then
+			LocationsFile = "RANDOM"
+			reset()
+			generateRandomPackages(1000)
+			spawnHPs()
+			print("HP Randomizer done")
+		end
+
+		if ImGui.Button("Randomizer (10000 packages) (game will be unresponsive)") then
+			LocationsFile = "RANDOM"
+			reset()
+			generateRandomPackages(10000)
+			spawnHPs()
+			print("HP Randomizer done")
+		end
+
+		if ImGui.Button("Randomizer (100000 packages) (game will die)") then
+			LocationsFile = "RANDOM"
+			reset()
+			generateRandomPackages(100000)
+			spawnHPs()
+			print("HP Randomizer done")
+		end
+		ImGui.Text("Random packages are very likely to appear in unreachable areas")
 
 		ImGui.End()
 	end
@@ -197,7 +273,7 @@ function getPlayerPos()
 	return {position}
 end
 
-function printHPpos()
+function printAllHPs()
 	for k,v in ipairs(HiddenPackagesLocations) do
 		print("--- HP " .. k .. " ---")
 		for a,b in pairs(v) do
@@ -221,7 +297,7 @@ function spawnObjectAtPos(x,y,z,w)
     transform:SetPosition(pos)
 
     local ID = WorldFunctionalTests.SpawnEntity(propPath, transform, '')
-    print("Object spawned ID: " .. tostring(ID))
+    --print("Object spawned ID: " .. tostring(ID))
     return ID
 end
 
@@ -237,7 +313,7 @@ function checkIfPlayerAtHP()
 		if isPlayerAtPos(v["x"], v["y"], (v["z"] + propZboost), v["w"]) then
 			atHP = true
 			playerAtHP =  "Yes: " .. v["id"]
-			if not inVehicle() then
+			if not inVehicle() then -- only allow picking them up on foot (like in the GTA games)
 				collectHP(v["id"])
 			end
 		end
@@ -274,24 +350,23 @@ end
 function spawnHPs()
 	for k,v in ipairs(HiddenPackagesLocations) do
 
-		if has_value(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it --> dont spawn it
+		if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it --> dont spawn it
 
 			local entID = spawnObjectAtPos(v["x"], v["y"], v["z"], v["w"])
 			table.insert(spawnedEnts, entID)
 			table.insert(spawnedNames, v["id"])
-			print("Spawned", v["id"])
+			print("Hidden Packages: spawned package ", v["id"])
 
 		end
 	end
 end
 
 function collectHP(name)
-	if has_value(spawnedNames, name) == false then
+	if tableHasValue(spawnedNames, name) == false then -- check if HP is NOT spawned and if so dont allow picking it up
 		return
 	end
 
-	--GameHUD.ShowMessage(tostring(name) .. " COLLECTED")
-	-- find ent and destroy it
+	-- find object ent and destroy(despawn) it
 	for k,v in ipairs(spawnedNames) do
 		if v == name then
 			--print("Destroying", name)
@@ -300,13 +375,15 @@ function collectHP(name)
 			table.remove(spawnedEnts, k)
 			table.remove(spawnedNames, k)
 			table.insert(collectedNames, name)
+			break
         end
     end
 
     if tableLen(collectedNames) == tableLen(HiddenPackagesLocations) then
     	-- got em all
-    	local msg = "All Hidden Packages collected!" -- VC message
+    	local msg = "All Hidden Packages collected!"
     	GameHUD.ShowWarning(msg)
+    	-- TODO give reward here
     else
     	local msg = "Hidden Package " .. tostring(tableLen(collectedNames)) .. " of " .. tostring(tableLen(HiddenPackagesLocations))
     	GameHUD.ShowWarning(msg)
@@ -315,7 +392,7 @@ function collectHP(name)
 end
 
 
-function has_value(tab,val)
+function tableHasValue(tab,val)
 	for i,v in ipairs(tab) do
 		if val == v then
 			return true
@@ -386,6 +463,7 @@ end
 function reset()
 	destroyAll()
 	collectedNames = {}
+	print("Hidden Packages: reset ok")
 end
 
 function destroyAll()
@@ -394,6 +472,7 @@ function destroyAll()
 	end
 	spawnedNames = {}
 	spawnedEnts = {}
+	print("Hidden Packages: destroyed all spawned packages")
 
 
 end
@@ -420,7 +499,8 @@ function readHPLocations(filename)
 		end
 
 		local hp = {}
-		hp["id"] = "hp" .. tostring(k)
+		-- id is based on coordinates so that the order of the lines in the packages file is not important and can be moved around later on
+		hp["id"] = "hp_x" .. tostring(vals[1]) .. "y" .. tostring(vals[2]) .. "z" .. tostring(vals[3]) .. "w" .. tostring(vals[4])
 		hp["x"] = tonumber(vals[1])
 		hp["y"] = tonumber(vals[2])
 		hp["z"] = tonumber(vals[3])
@@ -428,7 +508,7 @@ function readHPLocations(filename)
 		table.insert(HiddenPackagesLocations, hp)
 	end
 
-	print("Loaded " .. filename)
+	print("Hidden Packages: loaded locations file " .. filename)
 end
 
 -- from CET Snippets discord... could be useful
@@ -438,18 +518,6 @@ end
 --     shardUIevent.text = text
 --     Game.GetUISystem():QueueEvent(shardUIevent)
 -- end
-
--- custom map pin
--- registerHotkey('PlaceCustomMapPin', 'Place a map pin at player\'s position', function()
---     local mappinData = MappinData.new()
---     mappinData.mappinType = TweakDBID.new('Mappins.DefaultStaticMappin')
---     mappinData.variant = gamedataMappinVariant.FastTravelVariant
---     mappinData.visibleThroughWalls = true
-    
---     local position = Game.GetPlayer():GetWorldPosition()
-    
---     Game.GetMappinSystem():RegisterMappin(mappinData, position)
--- end)
 
 function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/cyberpunk2077/mods/2920)
 	local ws = Game.GetWorkspotSystem()
@@ -463,10 +531,10 @@ function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/
 	end
 end
 
-function placeMapPin(x,y,z,w)
+function placeMapPin(x,y,z,w) -- from CET Snippets discord
 	local mappinData = MappinData.new()
 	mappinData.mappinType = TweakDBID.new('Mappins.DefaultStaticMappin')
-	mappinData.variant = gamedataMappinVariant.CustomPositionVariant
+	mappinData.variant = gamedataMappinVariant.CustomPositionVariant -- see more types: https://github.com/WolvenKit/CyberCAT/blob/main/CyberCAT.Core/Enums/Dumped%20Enums/gamedataMappinVariant.cs
 	mappinData.visibleThroughWalls = true   
 
 	local position = Game.GetPlayer():GetWorldPosition()
@@ -477,27 +545,6 @@ function placeMapPin(x,y,z,w)
 
 	Game.GetMappinSystem():RegisterMappin(mappinData, position)
 end
-
-function saveLastUsed()
-	local file = io.open("LAST_USED", "w")
-	file:write(LocationsFile)
-	file:close()
-end
-
-function checkLastUsed()
-	if not file_exists("LAST_USED") then
-		print("Hidden Packages: no last used found")
-		return false
-	end
-
-	local file = io.open("LAST_USED","r")
-	local j = file:read("*a")
-	file:close()
-
-	return j
-
-end
-
 
 function saveLastUsed()
 	data = {
@@ -511,7 +558,7 @@ end
 
 function loadLastUsed()
 	if not file_exists("LAST_USED") then
-		print("Hidden Packages: no last used found")
+		--print("Hidden Packages: no last used found")
 		return false
 	end
 
@@ -537,3 +584,27 @@ function deleteSave()
 		return false
 	end
 end
+
+function generateRandomPackages(n)
+	print("Hidden Packages: generating " .. n .. " random packages...")
+	HiddenPackagesLocations = {}
+	local i = 0
+	while (i < n) do
+		x = math.random(-2623, 3598)
+		y = math.random(-4011, 3640)
+		z = math.random(1, 120)
+		w = 1
+
+		local hp = {}
+		hp["id"] = "hp_x" .. tostring(x) .. "y" .. tostring(y) .. "z" .. tostring(z) .. "w" .. tostring(w)
+		hp["x"] = x
+		hp["y"] = y
+		hp["z"] = z
+		hp["w"] = w
+		table.insert(HiddenPackagesLocations, hp)
+
+		i = i + 1
+	end
+
+end
+

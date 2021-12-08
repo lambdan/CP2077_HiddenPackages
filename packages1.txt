@@ -1,10 +1,12 @@
 # X Y Z W (space separated)
-# Blank lines or lines starting with # are ignored and can be used for comments etc.
+# Blank lines or lines containing # are ignored and can be used for comments etc.
 # W seems to always be 1 but better include it just to be safe...
-# Two decimals seems to be enough for XYZ
+# Two decimals should be enough for XYZ
+# These coordinates should be based on Player Position (seen in the mods CET window) which seems to be based on V's feet
+# The prop used for the package will get a little boost in the Z axis to appear higher above the ground so you dont need to worry about that.
 
 # 01 - Middle dock 
--1095.84 1162.39 1.24 1
+-1095.84 1162.39 1.24 1 //You can put comments here too! Just make sure to have a space between the W coordinate and your comment
 
 # 02 - Flower planter
 -1451.70 1128.32 23.64 1
@@ -36,5 +38,44 @@
 # 11 Rancho Coronado - behind pharmacy
 436.54 -1436.34 15 1
 
-# 12 Rancho Coronado - center of rollercoaster thingy
-443.57 -1658.97 37.02 1
+# 12 Rancho Coronado - underneath rollercoaster thingy in chair
+407.66 -1673.12 9.74 1 // Actually had it on the rollercoaster in the middle but that area was very glitchy so i moved it down here
+
+# 13 Statue in coastview
+-1853.74 -1955.45 48.69 1
+
+#14 Northside close to water
+-2112.08 2897.51 7.11 1
+
+#15 Northside under bridge
+-1695.45 3403.76 7.16 1
+
+# 16 Behind pipe very up north Oilfields
+-2623.58 3640.25 12.65 1
+
+# 17 Charter Hill - roof storefront
+58.60 87.49 20.76 1
+
+# 18 Arroyo Burger shop roof
+-536.53 -735.87 12.63 1
+
+# 19 Wellsprings garbage area
+-2061.44 -1128.93 9.08 1
+
+# 20 - Jackson Plains - 4th solar panel place
+-65.80 -4011.17 35.56 1
+
+# 21 - Red Peaks gas station pump roof
+1490.49 -1381.68 57.25 1
+
+# 22 - Biotechnica Flats red container
+-2862.93 -3864.72 70.81 1
+
+# 23 - Behind red peaks motel
+1637.92 -802.80 49.81 1
+
+# 24 - Rocky Ridge - literally out in nowhere
+2847.47 -1424.39 64.65 1
+
+# 25 - Rocky Ridge - wind turbine out in the middle of nowhere
+3598.28 -1541.74 118.88 1
