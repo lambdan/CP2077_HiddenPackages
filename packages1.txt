@@ -39,7 +39,7 @@
 436.54 -1436.34 15 1
 
 # 12 Rancho Coronado - underneath rollercoaster thingy in chair
-407.66 -1673.12 9.74 1 // Actually had it on the rollercoaster in the middle but that area was very glitchy so i moved it down here
+410.91 -1675.36 9.32 1 // Fixed rollercoaster
 
 # 13 Statue in coastview
 -1853.74 -1955.45 48.69 1
@@ -79,3 +79,4 @@
 
 # 25 - Rocky Ridge - wind turbine out in the middle of nowhere
 3598.28 -1541.74 118.88 1
+297.38 -2094.91 17.09 1 // Blue houses place

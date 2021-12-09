@@ -6,33 +6,42 @@ local HiddenPackagesMetadata = {
 local GameSession = require("Modules/GameSession.lua")
 local GameUI = require("Modules/GameUI.lua")
 local GameHUD = require("Modules/GameHUD.lua")
+local LEX = require("Modules/LuaEX.lua")
 
 local showWindow = false
 local alwaysShowWindow = false
+local showCreationWindow = false
+local showScaryButtons = false
 
 local LocationsFile = "packages1.txt" -- used as fallback also
-local propPath = "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent" -- spinning red arasaka logo
-local propZboost = 0.5 -- arasaka logo is kinda low so boost it upwards a little
+
+local Create_CreationFile = "created.txt"
+local Create_NewCreationFile = Create_CreationFile
+local Create_LocationComment = ""
+local Create_NewLocationComment = Create_LocationComment
+local Create_Message = "Lets go place packages!!!"
+
+local randomAmount = 100
+
+local nearPackageRange = 10
+
+local propPath = "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent" -- spinning red arasaka logo... propzboost = 0.5 
+--local propPath = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent" -- blue hologram cubes
+local propZboost = 0.5 -- lifts prop a bit above ground
+
 
 -- inits
-local spawnedEnts = {} -- prop ids for the spawned packages
-local spawnedNames = {} -- names of the spawned packages
 local collectedNames = {} -- names of collected packages
 local activeMappins = {} -- object ids for map pins
+local activePackages = {}
 local HiddenPackagesLocations = {} -- locations loaded from file
 
 local isLoaded = false
-local newLocationsFile = LocationsFile -- used for text field
+local newLocationsFile = LocationsFile -- used for text field in regular window
 
 
-registerHotkey("hp_place_waypoint", "Waypoint to next package", function()
-	for k,v in ipairs(HiddenPackagesLocations) do
-		if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
-			activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
-			GameHUD.ShowMessage("\"Hidden\" Package marked") -- not very hidden when you have a waypoint to it ;)
-			break -- only place one
-		end
-	end
+registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
+	markNearestPackage()
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -65,7 +74,7 @@ registerForEvent('onInit', function()
 	end)
 
     Observe('PlayerPuppet', 'OnAction', function(action) -- any player action
-        checkIfPlayerAtHP()
+        checkIfPlayerNearAnyPackage()
     end)
 
 	Observe('QuestTrackerGameController', 'OnInitialize', function()
@@ -73,9 +82,7 @@ registerForEvent('onInit', function()
 	        --print('Game Session Started')
 	        isLoaded = true
 
-	        if not loadSaveData(LocationsFile .. ".save") then
-	        	spawnHPs() -- no save so just spawn them
-	        end
+	        loadSaveData(LocationsFile .. ".save")
 	    end
 	end)
 
@@ -90,29 +97,23 @@ end)
 
 registerForEvent('onDraw', function()
 
-	if showWindow or alwaysShowWindow then
+	if showWindow then
 		ImGui.Begin("Hidden Packages")
 
-		ImGui.Text("Collected: " .. tostring(tableLen(collectedNames)) .. "/" .. tostring(tableLen(HiddenPackagesLocations)) .. " (" .. LocationsFile .. ")")
+		ImGui.Text("Collected: " .. tostring(LEX.tableLen(collectedNames)) .. "/" .. tostring(LEX.tableLen(HiddenPackagesLocations)) .. " (" .. LocationsFile .. ")")
 
-		if tableLen(collectedNames) < tableLen(HiddenPackagesLocations) then
-			if ImGui.Button("Place waypoint to a package")  then
-				for k,v in ipairs(HiddenPackagesLocations) do
-					if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
-						activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
-						break -- only place one
-					end
-				end
+		if LEX.tableLen(collectedNames) < LEX.tableLen(HiddenPackagesLocations) then
+			if ImGui.Button("Mark nearest package")  then
+				markNearestPackage()
 			end
-			if ImGui.Button("Place waypoints to ALL packages")  then
+			if ImGui.Button("Mark ALL packages")  then
 				for k,v in ipairs(HiddenPackagesLocations) do
-					if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
+					if LEX.tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
 						activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
 					end
 				end
 			end
 
-			ImGui.Text("NOTE: Waypoints tend to be buggy and not disappear.\nReloading save should fix it.")
 		else
 			ImGui.Text("You got them all!")
 		end
@@ -121,19 +122,56 @@ registerForEvent('onDraw', function()
 		ImGui.Text("Load new locations file:")
 		newLocationsFile = ImGui.InputText("", newLocationsFile, 50)
 		if ImGui.Button("Load") then
-			if file_exists(newLocationsFile) then
-				LocationsFile = newLocationsFile
-				reset()
-				readHPLocations(LocationsFile)
-				if not loadSaveData(LocationsFile .. ".save") then
-					spawnHPs()
-				end
-				saveLastUsed()
-			else
-				print("Hidden Packages ERROR: file " .. newLocationsFile .. " did not exist?")
-			end
+			switchLocationsFile(newLocationsFile)
+		end
+
+
+		ImGui.Text("")
+		if ImGui.Button("Create Package Locations") then
+			showCreationWindow = not showCreationWindow
+		end
+
+		ImGui.Separator()
+		ImGui.Text(" - Very Dumb Randomizer - ")
+		ImGui.Text("Randomized packages can appear out of reach.\nOnly useful for testing for now...\n(...but feel free to try anyway)")
+		randomAmount = ImGui.InputInt("Random packages", randomAmount, 10)
+		if ImGui.Button("Generate") then
+			-- todo save these to file
+			switchLocationsFile(generateRandomPackages(randomAmount))
+			print("HP Randomizer done")
 		end
 		ImGui.Separator()
+
+		if ImGui.Button("Show/hide scary buttons") then
+			showScaryButtons = not showScaryButtons
+		end
+
+		if showScaryButtons then
+			if ImGui.Button("Reset progress\n(" .. LocationsFile .. ")") then
+				deleteSave()
+				reset()
+			end
+
+			if ImGui.Button("reset()\ndespawns packages and sets collected to 0\n(SHOULD ALWAYS BE DONE BEFORE RELOADING MOD!)") then
+				reset()
+			end
+			if ImGui.Button("destroyAll()\ndespawns all packages") then
+				destroyAll()
+			end
+			if ImGui.Button("printAllHPs()\nprints current loaded HPs to console") then
+				printAllHPs()
+			end
+
+		end
+
+		ImGui.End()
+	end
+
+
+
+
+	if showCreationWindow then
+		ImGui.Begin("Hidden Package placin\'")
 
 		ImGui.Text("Player Position:")
 		if isLoaded then
@@ -143,94 +181,51 @@ registerForEvent('onDraw', function()
 			position["y"] = gps["y"]
 			position["z"] = gps["z"]
 			position["w"] = gps["w"]
-			ImGui.Text("X: " .. tostring(position["x"]))
-			ImGui.Text("Y: " .. tostring(position["y"]))
-			ImGui.Text("Z: " .. tostring(position["z"]))
+			ImGui.Text("X: " .. string.format("%.2f", position["x"]))
+			ImGui.SameLine()
+			ImGui.Text("Y: " .. string.format("%.2f", position["y"]))
+
+			ImGui.Text("Z: " .. string.format("%.2f", position["z"]))
+			ImGui.SameLine()
 			ImGui.Text("W: " .. tostring(position["w"]))
 		else
 			ImGui.Text("(Not in-game)")
 		end
 
-		if ImGui.Button("Always show this window") then
-			alwaysShowWindow = not alwaysShowWindow
-		end
-		ImGui.SameLine()
-		ImGui.Text(tostring(alwaysShowWindow))
+		local NP = HiddenPackagesLocations[findNearestPackage(false)]
+		ImGui.Text("Distance to nearest package: " .. string.format("%.2f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])))
 
-		ImGui.Text("")
-		ImGui.Text(" - Scary buttons - ")
+		ImGui.Separator()
+		Create_NewCreationFile = ImGui.InputText("File", Create_NewCreationFile, 50)
+		Create_NewLocationComment = ImGui.InputText("Comment (optional)", Create_NewLocationComment, 50)
+		if ImGui.Button("Save This Location") then
+
+			Create_CreationFile = Create_NewCreationFile
+			Create_LocationComment = Create_NewLocationComment
+
+			local gps = Game.GetPlayer():GetWorldPosition()
+			local position = {}
+			position["x"] = gps["x"]
+			position["y"] = gps["y"]
+			position["z"] = gps["z"]
+			position["w"] = gps["w"]
+			if appendLocationToFile(Create_NewCreationFile, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
+				Create_Message = "Location saved!"
+			else
+				Create_Message = "ERROR saving location :("
+			end
 		
-		if ImGui.Button("Delete save & reset progress\n(" .. LocationsFile .. ")") then
-			deleteSave()
-			reset()
-			spawnHPs()
 		end
 
-		if ImGui.Button("reset()") then
-			reset()
-		end
-		if ImGui.Button("spawnHPs()") then
-			spawnHPs()
-		end
-		if ImGui.Button("destroyAll()") then
-			destroyAll()
-		end
-		if ImGui.Button("printAllHPs()") then
-			printAllHPs()
+		if ImGui.Button("Apply & Test") then
+			switchLocationsFile(Create_NewCreationFile)
 		end
 
-		
-		-- randomizers
-		ImGui.Text("")
-		ImGui.Text(" - Randomizers - ")
-		if ImGui.Button("Randomizer (1 package)") then
-			LocationsFile = "RANDOM"
-			reset()
-			generateRandomPackages(1)
-			spawnHPs()
-			print("HP Randomizer done")
-		end
+		ImGui.Text(Create_Message) -- status message
 
-		if ImGui.Button("Randomizer (10 packages)") then
-			LocationsFile = "RANDOM"
-			reset()
-			generateRandomPackages(10)
-			spawnHPs()
-			print("HP Randomizer done")
+		if ImGui.Button("Close") then
+			showCreationWindow = not showCreationWindow
 		end
-
-		if ImGui.Button("Randomizer (100 packages)") then
-			LocationsFile = "RANDOM"
-			reset()
-			generateRandomPackages(100)
-			spawnHPs()
-			print("HP Randomizer done")
-		end
-
-		if ImGui.Button("Randomizer (1000 packages) (game will be laggy)") then
-			LocationsFile = "RANDOM"
-			reset()
-			generateRandomPackages(1000)
-			spawnHPs()
-			print("HP Randomizer done")
-		end
-
-		if ImGui.Button("Randomizer (10000 packages) (game will be unresponsive)") then
-			LocationsFile = "RANDOM"
-			reset()
-			generateRandomPackages(10000)
-			spawnHPs()
-			print("HP Randomizer done")
-		end
-
-		if ImGui.Button("Randomizer (100000 packages) (game will die)") then
-			LocationsFile = "RANDOM"
-			reset()
-			generateRandomPackages(100000)
-			spawnHPs()
-			print("HP Randomizer done")
-		end
-		ImGui.Text("Random packages are very likely to appear in unreachable areas.\nUseful for testing only... unless you really want to go insane")
 
 		ImGui.End()
 	end
@@ -279,29 +274,11 @@ function spawnObjectAtPos(x,y,z,w)
     pos.w = w
     transform:SetPosition(pos)
 
-    local ID = WorldFunctionalTests.SpawnEntity(propPath, transform, '')
-    --print("Object spawned ID: " .. tostring(ID))
-    return ID
+    return WorldFunctionalTests.SpawnEntity(propPath, transform, '') -- returns ID
 end
 
 
-function checkIfPlayerAtHP()
-	if not isLoaded then
-		return
-	end
 
-	local atHP = false
-
-	for k,v in ipairs(HiddenPackagesLocations) do
-		if isPlayerAtPos(v["x"], v["y"], (v["z"] + propZboost), v["w"]) then
-			atHP = true
-			if not inVehicle() then -- only allow picking them up on foot (like in the GTA games)
-				collectHP(v["id"])
-			end
-		end
-	end
-
-end
 
 function isPlayerAtPos(x,y,z,w)
 	local playerPos = Game.GetPlayer():GetWorldPosition()
@@ -320,90 +297,37 @@ end
 function destroyObject(e)
 	if Game.FindEntityByID(e) ~= nil then
         Game.FindEntityByID(e):GetEntity():Destroy()
-        --print("Destroyed object: ", e)
-    else
-    	--print("NOT DESTROYED OBJECT (nil): ", e)
     end
 end
 
-function spawnHPs()
-	for k,v in ipairs(HiddenPackagesLocations) do
+function collectHP(packageIndex) -- name is more like packageID
 
-		if tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it --> dont spawn it
+	local pkg = HiddenPackagesLocations[packageIndex]
+	table.insert(collectedNames, pkg["id"])
 
-			local entID = spawnObjectAtPos(v["x"], v["y"], v["z"], v["w"])
-			table.insert(spawnedEnts, entID)
-			table.insert(spawnedNames, v["id"])
-			activeMappins[k] = false
-			print("Hidden Packages: spawned package ", v["id"])
-
-		end
-	end
-end
-
-function collectHP(name) -- name is more like packageID
-	if tableHasValue(spawnedNames, name) == false then -- check if HP is NOT spawned and if so dont allow picking it up
-		return
+	-- destroy package object
+	destroyObject(activePackages[k])
+		
+	if activeMappins[packageIndex] then
+		Game.GetMappinSystem():UnregisterMappin(activeMappins[packageIndex])
+		activeMappins[packageIndex] = false
 	end
 
-	-- find object ent and destroy(despawn) it
-	for k,v in ipairs(spawnedNames) do
-		if v == name then
-			--print("Destroying", name)
-			entity = spawnedEnts[k]
-			destroyObject(entity)
-			table.remove(spawnedEnts, k)
-			table.remove(spawnedNames, k)
-			table.insert(collectedNames, name)
-			
-			-- unregister mappin and remove it
-			-- k is not usable here as mappins use HiddenPackageLocations index
-			for k2,v2 in ipairs(HiddenPackagesLocations) do
-				if v2["id"] == name then
-					if activeMappins[k2] then
-						Game.GetMappinSystem():UnregisterMappin(activeMappins[k2])
-					end
-					activeMappins[k2] = false
-					break
-				end
-			end
-
-			break
-        end
-    end
-
-    if tableLen(collectedNames) == tableLen(HiddenPackagesLocations) then
+    if LEX.tableLen(collectedNames) == LEX.tableLen(HiddenPackagesLocations) then
     	-- got em all
     	local msg = "All Hidden Packages collected!"
     	GameHUD.ShowWarning(msg)
     	-- TODO give reward here
     else
-    	local msg = "Hidden Package " .. tostring(tableLen(collectedNames)) .. " of " .. tostring(tableLen(HiddenPackagesLocations))
+    	local msg = "Hidden Package " .. tostring(LEX.tableLen(collectedNames)) .. " of " .. tostring(LEX.tableLen(HiddenPackagesLocations))
     	GameHUD.ShowWarning(msg)
     end
 
 end
 
 
-function tableHasValue(tab,val)
-	for i,v in ipairs(tab) do
-		if val == v then
-			return true
-		end
-	end
-	return false
-end
-
-function tableLen(table)
-	local i = 0
-	for p in pairs(table) do
-		i = i + 1
-	end
-	return i
-end
-
 function saveData(filename)
-	if tableLen(collectedNames) == 0 then
+	if LEX.tableLen(collectedNames) == 0 then
 		print("Hidden Packages: nothing to save?")
 		return false -- nothing to save
 	end
@@ -427,7 +351,7 @@ function saveData(filename)
 end
 
 function loadSaveData(filename)
-	if not file_exists(filename) then
+	if not LEX.fileExists(filename) then
 		print("Hidden Packages: failed to load save, didnt exist?")
 		return false
 	end
@@ -443,35 +367,28 @@ function loadSaveData(filename)
 	end
 
 	destroyAll()
-	spawnHPs()
 	print("Hidden Packages: loaded " .. filename)
 	return true
-end
-
-function file_exists(filename) -- https://stackoverflow.com/a/4991602
-    local f=io.open(filename,"r")
-    if f~=nil then io.close(f) return true else return false end
 end
 
 function reset()
 	destroyAll()
 	collectedNames = {}
+	removeAllMappins()
 	print("Hidden Packages: reset ok")
 end
 
 function destroyAll()
-	for k,v in ipairs(spawnedEnts) do
-		destroyObject(v)
+	for k,v in ipairs(activePackages) do
+		if activePackages[k] then
+			destroyObject(activePackages[k])
+			activePackages[k] = false
+		end
 	end
-	spawnedNames = {}
-	spawnedEnts = {}
-	print("Hidden Packages: destroyed all spawned packages")
-
-
 end
 
 function readHPLocations(filename)
-	if not file_exists(filename) then
+	if not LEX.fileExists(filename) then
 		print("Hidden Packages: failed to load " .. filename)
 		return false
 	end
@@ -504,7 +421,7 @@ function readHPLocations(filename)
 	print("Hidden Packages: loaded locations file " .. filename)
 end
 
--- from CET Snippets discord... could be useful
+-- from CET Snippets discord... could be useful, maybe for reward? or warning window?
 -- function showCustomShardPopup(titel, text)
 --     shardUIevent = NotifyShardRead.new()
 --     shardUIevent.title = titel
@@ -550,7 +467,7 @@ function saveLastUsed()
 end
 
 function loadLastUsed()
-	if not file_exists("LAST_USED") then
+	if not LEX.fileExists("LAST_USED") then
 		--print("Hidden Packages: no last used found")
 		return false
 	end
@@ -567,7 +484,7 @@ end
 
 function deleteSave()
 	filename = LocationsFile .. ".save"
-	if not file_exists(filename) then
+	if not LEX.fileExists(filename) then
 		return false
 	end
 
@@ -581,24 +498,168 @@ end
 
 function generateRandomPackages(n)
 	print("Hidden Packages: generating " .. n .. " random packages...")
+
+	local filename = "Random - " .. tostring(n) .. " packages (" .. os.date("%Y-%m-%d %H.%M.%S") .. ").rng"
 	HiddenPackagesLocations = {}
-	local i = 0
-	while (i < n) do
+	local i = 1
+	while (i <= n) do
 		x = math.random(-2623, 3598)
 		y = math.random(-4011, 3640)
 		z = math.random(1, 120)
 		w = 1
 
-		local hp = {}
-		hp["id"] = "hp_x" .. tostring(x) .. "y" .. tostring(y) .. "z" .. tostring(z) .. "w" .. tostring(w)
-		hp["x"] = x
-		hp["y"] = y
-		hp["z"] = z
-		hp["w"] = w
-		table.insert(HiddenPackagesLocations, hp)
+		appendLocationToFile(filename, x,y,z,w, "") -- extremely inefficient btw
 
 		i = i + 1
 	end
 
+	-- save to file and return filename
+	return filename
+
 end
 
+function appendLocationToFile(filename, x, y, z, w, comment)
+	if filename == "" then
+		print("HP Append: not a valid filename")
+		return false
+	end
+
+	local content = ""
+
+	-- first check if file already exists and read it if so
+	if LEX.fileExists(filename) then
+		local file = io.open(filename,"r")
+		content = file:read("*a")
+		content = content .. "\n"
+		file:close()
+	end
+
+	-- append new data
+	-- rounding to 2 decimals... seems fine?
+	content = content .. string.format("%.2f", x) .. " " .. string.format("%.2f", y) .. " " .. string.format("%.2f", z) .. " " .. tostring(w)
+
+	if comment ~= "" then -- only append comment if there is one
+		content = content .. " // " .. comment
+	end
+
+	local file = io.open(filename, "w")
+	file:write(content)
+	file:close()
+	print("HP Appended", filename, x, y, z, w, comment)
+	return true
+end
+
+function removeAllMappins()
+	print("removeallmappins")
+	for k,v in ipairs(activeMappins) do
+		print(k,v)
+		if activeMappins[k] then
+			Game.GetMappinSystem():UnregisterMappin(activeMappins[k])
+			activeMappins[k] = false
+		end
+	end
+	print("removed all mappins")
+end
+
+function distanceToCoordinates(x,y,z,w)
+	local playerPosition = Game.GetPlayer():GetWorldPosition()
+	
+	local x_distance = math.abs(playerPosition["x"] - x)
+	local y_distance = math.abs(playerPosition["y"] - y)
+	local z_distance = math.abs(playerPosition["z"] - z)
+	-- ignore w for now, seems to always be 1
+	
+	return math.sqrt( (x_distance*x_distance) + (y_distance*y_distance) + (z_distance*z_distance) ) -- pythagorean shit
+end
+
+function findNearestPackage(ignoreFound)
+	local lowest = nil
+	local nearestPackage = false
+
+	for k,v in ipairs(HiddenPackagesLocations) do
+		if (LEX.tableHasValue(collectedNames, v["id"]) == false) or (ignoreFound == false) then
+			
+			local distance = distanceToCoordinates(v["x"], v["y"], v["z"], v["w"])
+			
+			if lowest == nil then
+				lowest = distance
+				nearestPackage = k
+			end
+			
+			if distance < lowest then
+				lowest = distance
+				nearestPackage = k
+			end
+
+		end
+	end
+
+	return nearestPackage -- returns package index or false
+end
+
+function markNearestPackage()
+	removeAllMappins()
+
+	local NP = findNearestPackage(true) -- true to ignore found packages
+	if NP then
+		local pkg = HiddenPackagesLocations[NP]
+		activeMappins[NP] = placeMapPin(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
+		GameHUD.ShowMessage("Nearest package marked")
+		return true
+	end
+	return false
+end
+
+function switchLocationsFile(newFile)
+	if LEX.fileExists(newFile) then
+		LocationsFile = newFile
+		reset()
+		readHPLocations(LocationsFile)
+		loadSaveData(LocationsFile .. ".save")
+		saveLastUsed()
+		return true
+	else
+		print("Hidden Packages ERROR: file " .. newFile .. " did not exist?")
+		return false
+	end
+end
+
+function checkIfPlayerNearAnyPackage()
+	if not isLoaded then
+		return
+	end
+
+	for k,v in ipairs(HiddenPackagesLocations) do
+
+		if ( distanceToCoordinates(v["x"], v["y"], (v["z"] + propZboost), v["w"]) <= nearPackageRange ) and ( LEX.tableHasValue(collectedNames, v["id"]) == false ) then
+			-- player is near a uncollected package. spawn it if it isnt already and start checking if at actual HP
+
+			if not activePackages[k] then
+				activePackages[k] = spawnObjectAtPos(v["x"], v["y"], v["z"], v["w"])
+			end
+
+			checkIfPlayerAtHP(k)
+
+		else
+
+			if activePackages[k] then
+				destroyObject(activePackages[k])
+				activePackages[k] = false
+			end
+
+		end
+	end
+
+end
+
+
+function checkIfPlayerAtHP(packageIndex)
+
+	local pkg = HiddenPackagesLocations[packageIndex]
+	if isPlayerAtPos(pkg["x"], pkg["y"], (pkg["z"] + propZboost), pkg["w"]) then
+		if not inVehicle() then -- only allow picking them up on foot (like in the GTA games)
+			collectHP(packageIndex)
+		end
+	end
+
+end
