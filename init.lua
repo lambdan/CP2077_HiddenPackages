@@ -10,6 +10,7 @@ local LEX = require("Modules/LuaEX.lua")
 
 local userData = {
 	locFile = "packages1",
+	packages = {},
 	collectedPackageIDs = {}
 }
 
@@ -41,7 +42,6 @@ local propZboost = 0.25 -- lifts prop a bit above ground
 local collectedNames = {} -- names of collected packages
 local activeMappins = {} -- object ids for map pins
 local activePackages = {}
-local HiddenPackagesLocations = {} -- locations loaded from file
 local isInGame = false
 local newLocationsFile = userData.locFile -- used for text field in regular window
 
@@ -124,9 +124,9 @@ registerForEvent('onDraw', function()
 
 		if isInGame then
 
-			ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(HiddenPackagesLocations)) .. " (" .. userData.locFile .. ")")
+			ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(userData.packages)) .. " (" .. userData.locFile .. ")")
 
-			if LEX.tableLen(collectedNames) < LEX.tableLen(HiddenPackagesLocations) then
+			if LEX.tableLen(collectedNames) < LEX.tableLen(userData.packages) then
 				if ImGui.Button("Mark nearest package")  then
 					markNearestPackage()
 				end
@@ -136,7 +136,7 @@ registerForEvent('onDraw', function()
 			ImGui.Separator()
 		end
 
-		ImGui.Text("Active: " .. userData.locFile .. " (" .. tostring(LEX.tableLen(HiddenPackagesLocations)) .. " packages)")
+		ImGui.Text("Active: " .. userData.locFile .. " (" .. tostring(LEX.tableLen(userData.packages)) .. " packages)")
 		newLocationsFile = ImGui.InputText("", newLocationsFile, 50)
 		if ImGui.Button("Load New Locations File") then
 			switchLocationsFile(newLocationsFile)
@@ -173,7 +173,8 @@ registerForEvent('onDraw', function()
 
 		if debugMode then
 			ImGui.Text(" *** DEBUG MODE ACTIVE ***")
-			ImGui.Text("userData ids: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
+			ImGui.Text("userData pkgs: " .. tostring(LEX.tableLen(userData.packages)))
+			ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
 		end
 
 		ImGui.End()
@@ -203,7 +204,7 @@ registerForEvent('onDraw', function()
 			ImGui.SameLine()
 			ImGui.Text("\tW: " .. tostring(position["w"]))
 
-			local NP = HiddenPackagesLocations[findNearestPackage(false)] -- false to ignore if its collected or not
+			local NP = userData.packages[findNearestPackage(false)] -- false to ignore if its collected or not
 			if NP then
 				ImGui.Text("Distance to nearest package: " .. string.format("%.2f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])))
 			end
@@ -238,12 +239,12 @@ registerForEvent('onDraw', function()
 				readHPLocations(Create_NewCreationFile)
 				checkIfPlayerNearAnyPackage()
 
-				Create_Message = tostring(LEX.tableLen(HiddenPackagesLocations)) .. " packages applied & loaded"
+				Create_Message = tostring(LEX.tableLen(userData.packages)) .. " packages applied & loaded"
 			end
 			ImGui.Separator()
 			if ImGui.Button("Mark ALL packages on map") then
 				removeAllMappins()
-				for k,v in ipairs(HiddenPackagesLocations) do
+				for k,v in ipairs(userData.packages) do
 					if LEX.tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
 						activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
 					end
@@ -293,7 +294,7 @@ end
 function collectHP(packageIndex) -- name is more like packageID
 	debugMsg("Collecting package " .. packageIndex)
 
-	local pkg = HiddenPackagesLocations[packageIndex]
+	local pkg = userData.packages[packageIndex]
 	--table.insert(collectedNames, pkg["id"])
 	table.insert(userData.collectedPackageIDs, pkg["id"])
 
@@ -305,14 +306,14 @@ function collectHP(packageIndex) -- name is more like packageID
 		activeMappins[packageIndex] = nil
 	end
 
-    if countCollected() == LEX.tableLen(HiddenPackagesLocations) then
+    if countCollected() == LEX.tableLen(userData.packages) then
     	-- got em all
     	debugMsg("Got all packages")
     	local msg = "All Hidden Packages collected!"
     	GameHUD.ShowWarning(msg)
     	rewardAllPackages()
     else
-    	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LEX.tableLen(HiddenPackagesLocations))
+    	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LEX.tableLen(userData.packages))
     	GameHUD.ShowWarning(msg)
     end
 
@@ -327,7 +328,7 @@ function reset()
 end
 
 function destroyAllPackageObjects()
-	for k,v in ipairs(HiddenPackagesLocations) do
+	for k,v in ipairs(userData.packages) do
 		if activePackages[k] then
 			destroyObject(activePackages[k])
 			activePackages[k] = nil
@@ -342,7 +343,7 @@ function readHPLocations(filename)
 		return false
 	end
 
-	HiddenPackagesLocations = {}
+	userData.packages = {}
 	lines = {}
 	for line in io.lines(filename) do
 		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) then 
@@ -363,7 +364,7 @@ function readHPLocations(filename)
 		hp["y"] = tonumber(vals[2])
 		hp["z"] = tonumber(vals[3])
 		hp["w"] = tonumber(vals[4])
-		table.insert(HiddenPackagesLocations, hp)
+		table.insert(userData.packages, hp)
 	end
 
 	debugMsg("read locations file " .. filename)
@@ -409,7 +410,7 @@ function generateRandomPackages(n)
 	debugMsg("generating " .. n .. " random packages...")
 
 	local filename = "Random - " .. tostring(n) .. " packages (" .. os.date("%Y-%m-%d %H.%M.%S") .. ").rng"
-	HiddenPackagesLocations = {}
+	userData.packages = {}
 	local i = 1
 	while (i <= n) do
 		x = math.random(-2623, 3598)
@@ -484,7 +485,7 @@ function findNearestPackage(ignoreFound) --
 	local lowest = nil
 	local nearestPackage = false
 
-	for k,v in ipairs(HiddenPackagesLocations) do
+	for k,v in ipairs(userData.packages) do
 		if (LEX.tableHasValue(userData.collectedPackageIDs, v["id"]) == false) or (ignoreFound == false) then
 			
 			local distance = distanceToCoordinates(v["x"], v["y"], v["z"], v["w"])
@@ -514,7 +515,7 @@ function markNearestPackage()
 
 	local NP = findNearestPackage(true) -- true to ignore found packages
 	if NP then
-		local pkg = HiddenPackagesLocations[NP]
+		local pkg = userData.packages[NP]
 		activeMappins[NP] = placeMapPin(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
 		debugMsg("package #" .. NP .. " marked")
 		HUDMessage("Nearest package marked")
@@ -541,7 +542,7 @@ function checkIfPlayerNearAnyPackage()
 		return
 	end
 
-	for k,v in ipairs(HiddenPackagesLocations) do
+	for k,v in ipairs(userData.packages) do
 
 		local d = distanceToCoordinates(v["x"], v["y"], v["z"], v["w"])
 
@@ -605,7 +606,7 @@ end
 function countCollected()
 	-- cant just check length of collectedNames as it may include packages from other location files
 	local c = 0
-	for k,v in ipairs(HiddenPackagesLocations) do
+	for k,v in ipairs(userData.packages) do
 		if LEX.tableHasValue(userData.collectedPackageIDs, v["id"]) then
 			c = c + 1
 		end
