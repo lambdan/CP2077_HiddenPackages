@@ -24,8 +24,16 @@ function LEX.tableLen(table)
     return i
 end
 
-function LEX.stringStarts(String,Start)
+function LEX.stringStarts(String,Start) -- https://stackoverflow.com/a/22831842
    return string.sub(String,1,string.len(Start))==Start
+end
+
+function LEX.copyTable(t) -- https://stackoverflow.com/a/39185792
+    local new = {}
+    for k,v in ipairs(t) do
+        new[k] = v
+    end
+    return new
 end
 
 return LEX
