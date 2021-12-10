@@ -24,4 +24,8 @@ function LEX.tableLen(table)
     return i
 end
 
+function LEX.stringStarts(String,Start)
+   return string.sub(String,1,string.len(Start))==Start
+end
+
 return LEX
