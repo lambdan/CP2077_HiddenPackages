@@ -8,8 +8,10 @@ local GameUI = require("Modules/GameUI.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
+local locationsFile = "packages1"
+
 local userData = {
-	locFile = "packages1",
+	locFile = "",
 	packages = {},
 	collectedPackageIDs = {}
 }
@@ -20,6 +22,7 @@ local showRandomizer = false
 local HUDMessage_Current = ""
 local HUDMessage_Last = 0
 
+local statusMsg = ""
 local showWindow = false
 local showCreationWindow = false
 local showScaryButtons = false
@@ -28,7 +31,7 @@ local showScaryButtons = false
 local Create_NewCreationFile = "created"
 --local Create_LocationComment = ""
 local Create_NewLocationComment = ""
-local Create_Message = "Status message goes here"
+local Create_Message = ""
 
 local randomizerAmount = 100
 local nearPackageRange = 100 -- if player this near to package then spawn it (and despawn when outside)
@@ -72,13 +75,13 @@ end)
 
 registerForEvent("onOverlayClose", function()
 	showWindow = false
+	showScaryButtons = false
 end)
 
 registerForEvent('onInit', function()
 
 	GameSession.StoreInDir('Sessions')
 	GameSession.Persist(userData)
-	readHPLocations(userData.locFile)
 
 	isInGame = Game.GetPlayer() and Game.GetPlayer():IsAttached() and not Game.GetSystemRequestsHandler():IsPreGame()
 
@@ -92,16 +95,17 @@ registerForEvent('onInit', function()
     end)
 
 	--GameSession.OnSave(function()
-		--userData.locFile = LocationsFile
-		--userData.collectedPackageIDs = LEX.copyTable(collectedNames)
 	--end)
 
-	--GameSession.OnLoad(function()
-		--reset()
-		--LocationsFile = userData.locFile
-		--collectedNames = LEX.copyTable(userData.collectedPackageIDs)
-		--switchLocationsFile(userData.locFile)
-	--end)
+	GameSession.OnLoad(function()
+		if LEX.tableLen(userData.packages) == 0 then
+			debugMsg("userData had no packages! using default...")
+			userData.locFile = locationsFile
+			userData.packages = readHPLocations(locationsFile)
+			userData.collectedPackageIDs = {}
+		end
+
+	end)
 
     GameSession.OnEnd(function()
         -- Triggered once the current game session has ended
@@ -121,26 +125,30 @@ registerForEvent('onDraw', function()
 
 	if showWindow then
 		ImGui.Begin("Hidden Packages")
+		ImGui.Text(statusMsg)
 
 		if isInGame then
-
 			ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(userData.packages)) .. " (" .. userData.locFile .. ")")
 
-			if LEX.tableLen(collectedNames) < LEX.tableLen(userData.packages) then
+			if countCollected() < LEX.tableLen(userData.packages) then
 				if ImGui.Button("Mark nearest package")  then
 					markNearestPackage()
+				
 				end
 			else
 				ImGui.Text("You got them all!")
 			end
-			ImGui.Separator()
+			
+			
 		end
 
-		ImGui.Text("Active: " .. userData.locFile .. " (" .. tostring(LEX.tableLen(userData.packages)) .. " packages)")
+		ImGui.Separator()
+
 		newLocationsFile = ImGui.InputText("", newLocationsFile, 50)
 		if ImGui.Button("Load New Locations File") then
-			switchLocationsFile(newLocationsFile)
-			checkIfPlayerNearAnyPackage()
+			locationsFile = newLocationsFile
+			switchLocationsFile(locationsFile)
+			statusMsg = "OK, loaded " .. locationsFile
 		end
 		ImGui.Separator()
 		
@@ -155,24 +163,32 @@ registerForEvent('onDraw', function()
 			ImGui.Separator()
 		end
 
-		if ImGui.Button("Package Placing Window") then
+		if ImGui.Button("Package Placing Mode") then
 			showCreationWindow = true
 		end
 
-		if ImGui.Button("Toggle Scary Buttons") then
+		if ImGui.Button("Scary Options") then
 			showScaryButtons = not showScaryButtons
 		end
 
 		if showScaryButtons then
 			ImGui.Separator()
-			if ImGui.Button("Reset progress\n(" .. userData.locFile .. ")") then
-				clearProgress(userData.locFile)
-				reset()
+			ImGui.Text("Scary options:")
+			if ImGui.Button("Reload packages\n(" .. locationsFile .. ")") then
+				userData.packages = readHPLocations(locationsFile)
 			end
+			if countCollected() > 0 then
+				if ImGui.Button("Reset progress\n(" .. userData.locFile .. ")") then
+					clearProgress(userData.locFile)
+					reset()
+				end
+			end
+			ImGui.Separator()
 		end
 
 		if debugMode then
 			ImGui.Text(" *** DEBUG MODE ACTIVE ***")
+			ImGui.Text("isInGame: " .. tostring(isInGame))
 			ImGui.Text("userData pkgs: " .. tostring(LEX.tableLen(userData.packages)))
 			ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
 		end
@@ -211,7 +227,7 @@ registerForEvent('onDraw', function()
 
 			ImGui.Separator()
 			Create_NewCreationFile = ImGui.InputText("File", Create_NewCreationFile, 50)
-			Create_NewLocationComment = ImGui.InputText("Comment (optional)", Create_NewLocationComment, 50)
+			Create_NewLocationComment = ImGui.InputText("Comment", Create_NewLocationComment, 50)
 			if ImGui.Button("Save This Location") then
 
 				--Create_CreationFile = Create_NewCreationFile
@@ -225,6 +241,7 @@ registerForEvent('onDraw', function()
 				position["w"] = gps["w"]
 				if appendLocationToFile(Create_NewCreationFile, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
 					Create_Message = "Location saved!"
+					Create_NewLocationComment = ""
 				else
 					Create_Message = "ERROR saving location :("
 				end
@@ -232,22 +249,16 @@ registerForEvent('onDraw', function()
 			end
 
 			if ImGui.Button("Apply & Test") then
-				clearProgress(Create_NewCreationFile)
-				--switchLocationsFile(Create_NewCreationFile)
-
-				reset()
-				readHPLocations(Create_NewCreationFile)
-				checkIfPlayerNearAnyPackage()
-
+				switchLocationsFile(Create_NewCreationFile)
 				Create_Message = tostring(LEX.tableLen(userData.packages)) .. " packages applied & loaded"
 			end
 			ImGui.Separator()
+
 			if ImGui.Button("Mark ALL packages on map") then
 				removeAllMappins()
 				for k,v in ipairs(userData.packages) do
-					if LEX.tableHasValue(collectedNames, v["id"]) == false then -- check if package is in collectedNames, if so we already got it
-						activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
-					end
+					-- could check if package is collected here and if so not show it, but when creating locations we want to see them anyway
+					activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
 				end
 			end
 
@@ -260,6 +271,7 @@ registerForEvent('onDraw', function()
 		end
 
 		ImGui.Separator()
+		ImGui.Text("Note: Packages aren\'t collected when you have this window open")
 		if ImGui.Button("Close") then
 			showCreationWindow = false
 		end
@@ -295,16 +307,14 @@ function collectHP(packageIndex) -- name is more like packageID
 	debugMsg("Collecting package " .. packageIndex)
 
 	local pkg = userData.packages[packageIndex]
-	--table.insert(collectedNames, pkg["id"])
 	table.insert(userData.collectedPackageIDs, pkg["id"])
 
-	-- destroy package object
-	destroyObject(activePackages[k])
-		
 	if activeMappins[packageIndex] then -- unregister map pin if any
 		Game.GetMappinSystem():UnregisterMappin(activeMappins[packageIndex])
 		activeMappins[packageIndex] = nil
 	end
+
+	destroyObject(activePackages[packageIndex]) -- despawn 
 
     if countCollected() == LEX.tableLen(userData.packages) then
     	-- got em all
@@ -323,7 +333,6 @@ end
 function reset()
 	destroyAllPackageObjects()
 	removeAllMappins()
-	userData.collectedPackageIDs = {}
 	debugMsg("reset() OK")
 end
 
@@ -339,18 +348,17 @@ end
 
 function readHPLocations(filename)
 	if not LEX.fileExists(filename) then
-		debugMsg("readHPLocations: failed to load " .. filename)
 		return false
 	end
 
-	userData.packages = {}
-	lines = {}
+	local lines = {}
 	for line in io.lines(filename) do
 		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) then 
 			lines[#lines + 1] = line
 		end
 	end
 
+	local packages = {}
 	for k,v in pairs(lines) do
 		local vals = {}
 		for word in string.gmatch(v, '([^ ]+)') do
@@ -364,10 +372,9 @@ function readHPLocations(filename)
 		hp["y"] = tonumber(vals[2])
 		hp["z"] = tonumber(vals[3])
 		hp["w"] = tonumber(vals[4])
-		table.insert(userData.packages, hp)
+		table.insert(packages, hp)
 	end
-
-	debugMsg("read locations file " .. filename)
+	return packages
 end
 
 -- from CET Snippets discord... could be useful, maybe for reward? or warning window?
@@ -526,10 +533,15 @@ function markNearestPackage()
 end
 
 function switchLocationsFile(newFile)
+	if not isInGame then
+		-- can only be used in game as we manipulate session data
+		return
+	end
+
 	if LEX.fileExists(newFile) then
 		userData.locFile = newFile
+		userData.packages = readHPLocations(newFile)
 		reset()
-		readHPLocations(userData.locFile)
 		return true
 	else
 		debugMsg("switchLocationsFile() ERROR: " .. newFile .. " did not exist?")
@@ -546,16 +558,27 @@ function checkIfPlayerNearAnyPackage()
 
 		local d = distanceToCoordinates(v["x"], v["y"], v["z"], v["w"])
 
-		if ( d <= nearPackageRange ) and ( LEX.tableHasValue(userData.collectedPackageIDs, v["id"]) == false ) then
-			-- player is near a uncollected package. spawn it if it isnt already
+		if ( d <= nearPackageRange ) then -- player is in spawning range of package
 
-			if not activePackages[k] then
-				debugMsg("spawning package " .. k)
-				activePackages[k] = spawnObjectAtPos(v["x"], v["y"], v["z"]+propZboost, v["w"])
-			end
+			if (LEX.tableHasValue(userData.collectedPackageIDs, v["id"]) == false) or showCreationWindow then
+				-- player has not collected package OR is in creation mode = should spawn the package
 
-			if d <= 0.5 and not inVehicle() then 
-				collectHP(k)
+				if not activePackages[k] then -- package is not already spawned
+					debugMsg("spawning package " .. k)
+					activePackages[k] = spawnObjectAtPos(v["x"], v["y"], v["z"]+propZboost, v["w"])
+				end
+
+				if d <= 0.5 and not inVehicle() then
+
+					if showCreationWindow then
+						-- creation mode, dont collect it (messes with userdata collected packages)
+						GameHUD.ShowWarning("Simulated Package Collection")
+					else
+						-- player is actually playing, lets get it 
+						collectHP(k)
+					end
+
+				end
 			end
 
 		else
