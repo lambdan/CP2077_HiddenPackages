@@ -39,6 +39,7 @@ local nearPackageRange = 100 -- if player this near to package then spawn it (an
 
 --local propPath = "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent" -- spinning red arasaka logo... propzboost = 0.5 recommended
 local propPath = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent" -- blue hologram cubes
+--local propPath = "base/environment/ld_kit/marker_blue_small.ent" -- lol
 local propZboost = 0.25 -- lifts prop a bit above ground
 
 
@@ -152,7 +153,7 @@ registerForEvent('onDraw', function()
 
 		else
 			ImGui.Text("Not in-game")
-			ImGui.Text("Using locations from: " .. locationsFile)
+			ImGui.Text("DEFAULT packages: " .. locationsFile)
 		end
 
 		ImGui.Separator()
@@ -160,9 +161,9 @@ registerForEvent('onDraw', function()
 		newLocationsFile = ImGui.InputText("", newLocationsFile, 50)
 		if ImGui.Button("Load New Locations File") then
 			if switchLocationsFile(newLocationsFile) then
-				statusMsg = "OK, loaded " .. newLocationsFile
+				statusMsg = "OK, loaded: " .. newLocationsFile
 			else
-				statusMsg = "Error loading " .. newLocationsFile
+				statusMsg = "Error loading: " .. newLocationsFile
 			end
 		end
 		ImGui.Text(statusMsg)
@@ -191,30 +192,46 @@ registerForEvent('onDraw', function()
 			ImGui.Text("userData packages: " .. tostring(LEX.tableLen(userData.packages)))
 			ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
 			ImGui.Text("countCollected(): " .. tostring(countCollected()))
+			if ImGui.Button("reset()") then
+				reset()
+			end
 			ImGui.Separator()
 		end
 
 		if isInGame then
 
-			if ImGui.Button("Scary Options") then
+			if ImGui.Button("Show/hide Scary Buttons") then
 				showScaryButtons = not showScaryButtons
 			end
 
 			if showScaryButtons then
+
 				ImGui.Separator()
-				ImGui.Text("Scary options:")
-				if ImGui.Button("Load default packages\n(" .. locationsFile .. ")") then
+				ImGui.Text("Warning: One click is all you need.\nNo confirmations!")
+
+				if ImGui.Button("Load DEFAULT packages\n(" .. locationsFile .. ")") then
+					reset()
 					switchLocationsFile(locationsFile)
 				end
+
 				if ImGui.Button("Reload packages\n(" .. userData.locFile .. ")") then
-					userData.packages = readHPLocations(locationsFile)
+					userData.packages = readHPLocations(userData.locFile)
 				end
+
 				if countCollected() > 0 then
 					if ImGui.Button("Reset progress\n(" .. userData.locFile .. ")") then
 						clearProgress(userData.locFile)
 						reset()
 					end
 				end
+
+				if LEX.tableLen(userData.collectedPackageIDs) > 0 then
+					if ImGui.Button("Reset ALL progress") then
+						userData.collectedPackageIDs = {}
+						reset()
+					end
+				end
+
 			end
 
 		end
@@ -248,7 +265,7 @@ registerForEvent('onDraw', function()
 
 			local NP = userData.packages[findNearestPackage(false)] -- false to ignore if its collected or not
 			if NP then
-				ImGui.Text("Distance from other package: " .. string.format("%.2f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])))
+				ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])) .. " m away")
 			end
 
 			ImGui.Separator()
@@ -263,6 +280,7 @@ registerForEvent('onDraw', function()
 				position["z"] = gps["z"]
 				position["w"] = gps["w"]
 				if appendLocationToFile(Create_NewCreationFile, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
+					HUDMessage("Location saved!")
 					Create_Message = "Location saved!"
 					Create_NewLocationComment = ""
 				else
@@ -273,6 +291,7 @@ registerForEvent('onDraw', function()
 
 			if ImGui.Button("Apply & Test") then
 				switchLocationsFile(Create_NewCreationFile)
+				checkIfPlayerNearAnyPackage()
 				Create_Message = tostring(LEX.tableLen(userData.packages)) .. " packages applied & loaded"
 			end
 			ImGui.Separator()
@@ -376,7 +395,7 @@ function readHPLocations(filename)
 
 	local lines = {}
 	for line in io.lines(filename) do
-		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) then 
+		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then 
 			lines[#lines + 1] = line
 		end
 	end
@@ -496,7 +515,7 @@ end
 
 function removeAllMappins()
 	for k,v in ipairs(activeMappins) do
-		print(k,v)
+		--print(k,v)
 		if activeMappins[k] then
 			Game.GetMappinSystem():UnregisterMappin(activeMappins[k])
 			activeMappins[k] = nil
@@ -553,7 +572,7 @@ function markNearestPackage()
 		local pkg = userData.packages[NP]
 		activeMappins[NP] = placeMapPin(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
 		debugMsg("package #" .. NP .. " marked")
-		HUDMessage("Nearest package marked")
+		HUDMessage("Nearest Package Marked (" .. string.format("%.f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])) .. " m away)")
 		return true
 	end
 	HUDMessage("No packages available")
@@ -562,15 +581,18 @@ end
 
 function switchLocationsFile(newFile)
 	if LEX.fileExists(newFile) and not LEX.tableHasValue(reservedFilenames, newFile) then
+		debugMsg("switchLocationsFile() " .. newFile)
 
 		if isInGame then 
 			userData.locFile = newFile
 			userData.packages = readHPLocations(newFile)
 			reset()
 			overrideLocations = false
+			debugMsg("switchLocationsFile() " .. newFile .. "OK (in-game)")
 		else
 			locationsFile = newFile
-			overrideLocations = true 
+			overrideLocations = true
+			debugMsg("switchLocationsFile() " .. newFile .. "OK (NOT in game)")
 		end
 
 		return true
