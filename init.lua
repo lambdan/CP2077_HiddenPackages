@@ -8,6 +8,7 @@ local GameUI = require("Modules/GameUI.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
+local reservedFilenames = {"DEBUG", "RANDOMIZER", "init.lua", "db.sqlite3", "Hidden Packages.log"}
 local locationsFile = "packages1"
 
 local userData = {
@@ -27,9 +28,7 @@ local showWindow = false
 local showCreationWindow = false
 local showScaryButtons = false
 
---local Create_CreationFile = "created.locations"
 local Create_NewCreationFile = "created"
---local Create_LocationComment = ""
 local Create_NewLocationComment = ""
 local Create_Message = ""
 
@@ -64,7 +63,7 @@ registerForEvent("onOverlayOpen", function()
 		debugMode = false
 	end
 
-	if LEX.fileExists("I understand that the Randomizer is terrible at the moment") or debugMode then
+	if LEX.fileExists("RANDOMIZER") or debugMode then
 		showRandomizer = true
 	else
 		showRandomizer = false
@@ -156,7 +155,6 @@ registerForEvent('onDraw', function()
 			ImGui.Text("Randomizer:")
 			randomizerAmount = ImGui.InputInt("Packages", randomizerAmount, 100)
 			if ImGui.Button("Generate Randomizer") then
-				-- todo save these to file
 				switchLocationsFile(generateRandomPackages(randomizerAmount))
 				debugMsg("HP Randomizer done")
 			end
@@ -222,16 +220,13 @@ registerForEvent('onDraw', function()
 
 			local NP = userData.packages[findNearestPackage(false)] -- false to ignore if its collected or not
 			if NP then
-				ImGui.Text("Distance to nearest package: " .. string.format("%.2f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])))
+				ImGui.Text("Distance from other package: " .. string.format("%.2f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])))
 			end
 
 			ImGui.Separator()
 			Create_NewCreationFile = ImGui.InputText("File", Create_NewCreationFile, 50)
 			Create_NewLocationComment = ImGui.InputText("Comment", Create_NewLocationComment, 50)
 			if ImGui.Button("Save This Location") then
-
-				--Create_CreationFile = Create_NewCreationFile
-				--Create_LocationComment = Create_NewLocationComment
 
 				local gps = Game.GetPlayer():GetWorldPosition()
 				local position = {}
@@ -243,7 +238,7 @@ registerForEvent('onDraw', function()
 					Create_Message = "Location saved!"
 					Create_NewLocationComment = ""
 				else
-					Create_Message = "ERROR saving location :("
+					Create_Message = "Error saving location :("
 				end
 			
 			end
@@ -257,7 +252,6 @@ registerForEvent('onDraw', function()
 			if ImGui.Button("Mark ALL packages on map") then
 				removeAllMappins()
 				for k,v in ipairs(userData.packages) do
-					-- could check if package is collected here and if so not show it, but when creating locations we want to see them anyway
 					activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
 				end
 			end
@@ -303,7 +297,7 @@ function destroyObject(e)
     end
 end
 
-function collectHP(packageIndex) -- name is more like packageID
+function collectHP(packageIndex)
 	debugMsg("Collecting package " .. packageIndex)
 
 	local pkg = userData.packages[packageIndex]
@@ -347,7 +341,8 @@ function destroyAllPackageObjects()
 end
 
 function readHPLocations(filename)
-	if not LEX.fileExists(filename) then
+	if not LEX.fileExists(filename) or LEX.tableHasValue(reservedFilenames, filename) then
+		debugMsg("readHPLocations() not a valid file")
 		return false
 	end
 
@@ -416,7 +411,7 @@ end
 function generateRandomPackages(n)
 	debugMsg("generating " .. n .. " random packages...")
 
-	local filename = "Random - " .. tostring(n) .. " packages (" .. os.date("%Y-%m-%d %H.%M.%S") .. ").rng"
+	local filename = tostring(n) .. " random packages (" .. os.date("%Y-%m-%d %H.%M.%S") .. ")"
 	userData.packages = {}
 	local i = 1
 	while (i <= n) do
@@ -436,7 +431,7 @@ function generateRandomPackages(n)
 end
 
 function appendLocationToFile(filename, x, y, z, w, comment)
-	if filename == "" then
+	if filename == "" or LEX.tableHasValue(reservedFilenames, filename) then
 		debugMsg("appendLocationToFile: not a valid filename")
 		return false
 	end
