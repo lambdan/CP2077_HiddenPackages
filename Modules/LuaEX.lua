@@ -36,4 +36,8 @@ function LEX.copyTable(t) -- https://stackoverflow.com/a/39185792
     return new
 end
 
+function LEX.trim(s) -- https://gist.github.com/ram-nadella/dd067dfeb3c798299e8d
+    return (string.gsub(s, "^%s*(.-)%s*$", "%1"))
+end
+
 return LEX
