@@ -46,7 +46,6 @@ local propZboost = 0.25 -- lifts prop a bit above ground
 
 
 -- inits
-local collectedNames = {} -- names of collected packages
 local activeMappins = {} -- object ids for map pins
 local activePackages = {}
 local isInGame = false
