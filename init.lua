@@ -266,7 +266,7 @@ registerForEvent('onDraw', function()
 
 			local NP = userData.packages[findNearestPackage(false)] -- false to ignore if its collected or not
 			if NP then
-				ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])) .. " M away")
+				ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])) .. "M away")
 			end
 
 			ImGui.Separator()
@@ -573,7 +573,7 @@ function markNearestPackage()
 		local pkg = userData.packages[NP]
 		activeMappins[NP] = placeMapPin(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
 		debugMsg("package #" .. NP .. " marked")
-		HUDMessage("Nearest Package Marked (" .. string.format("%.f", distanceToCoordinates(pkg["x"],pkg["y"],pkg["z"],pkg["w"])) .. " M away)")
+		HUDMessage("Nearest Package Marked (" .. string.format("%.f", distanceToCoordinates(pkg["x"],pkg["y"],pkg["z"],pkg["w"])) .. "M away)")
 		return true
 	end
 	HUDMessage("No packages available")
