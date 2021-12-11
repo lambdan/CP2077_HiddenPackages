@@ -8,8 +8,10 @@ local GameUI = require("Modules/GameUI.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
-local reservedFilenames = {"DEBUG", "RANDOMIZER", "init.lua", "db.sqlite3", "Hidden Packages.log"}
-local locationsFile = "packages1"
+local reservedFilenames = {"DEBUG", "RANDOMIZER", "DEFAULT", "init.lua", "db.sqlite3", "Hidden Packages.log"}
+
+local locationsFile = "packages1" -- default/fallback packages file, will be overriden by packages file named in DEFAULT
+local overrideLocations = false
 
 local userData = {
 	locFile = "",
@@ -78,11 +80,20 @@ registerForEvent("onOverlayClose", function()
 end)
 
 registerForEvent('onInit', function()
-
 	GameSession.StoreInDir('Sessions')
 	GameSession.Persist(userData)
-
 	isInGame = Game.GetPlayer() and Game.GetPlayer():IsAttached() and not Game.GetSystemRequestsHandler():IsPreGame()
+
+	-- check if file DEFAULT exists and if so load default packages file from there
+	if LEX.fileExists("DEFAULT") then
+		local file = io.open("DEFAULT", "r")
+		local overrideFile = LEX.trim(file:read("*a"))
+		file:close()
+		if LEX.fileExists(overrideFile) and not LEX.tableHasValue(reservedFilenames, overrideFile) then
+			locationsFile = overrideFile
+			print("Loaded hidden packages file from DEFAULT: " .. locationsFile)
+		end
+	end
 
     GameSession.OnStart(function()
         -- Triggered once the load is complete and the player is in the game
@@ -97,11 +108,10 @@ registerForEvent('onInit', function()
 	--end)
 
 	GameSession.OnLoad(function()
-		if LEX.tableLen(userData.packages) == 0 then
-			debugMsg("userData had no packages! using default...")
+		if overrideLocations or LEX.tableLen(userData.packages) == 0 then
 			userData.locFile = locationsFile
 			userData.packages = readHPLocations(locationsFile)
-			userData.collectedPackageIDs = {}
+			overrideLocations = false -- only load these new packages once. if user loads another save file where it already had packages loaded, use that.
 		end
 
 	end)
@@ -112,6 +122,7 @@ registerForEvent('onInit', function()
         debugMsg('Game Session Ended')
         isInGame = false
         reset() -- destroy all objects and reset tables etc
+        -- should maybe wipe userData here but it gets properly set when starting a new game or loading a game anyway so not sure its necessary
     end)
 
     Observe('PlayerPuppet', 'OnAction', function(action) -- any player action
@@ -124,10 +135,11 @@ registerForEvent('onDraw', function()
 
 	if showWindow then
 		ImGui.Begin("Hidden Packages")
-		ImGui.Text(statusMsg)
 
 		if isInGame then
-			ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(userData.packages)) .. " (" .. userData.locFile .. ")")
+
+			ImGui.Text("Using locations from: " .. userData.locFile)
+			ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(userData.packages)))
 
 			if countCollected() < LEX.tableLen(userData.packages) then
 				if ImGui.Button("Mark nearest package")  then
@@ -137,24 +149,29 @@ registerForEvent('onDraw', function()
 			else
 				ImGui.Text("You got them all!")
 			end
-			
-			
+
+		else
+			ImGui.Text("Not in-game")
+			ImGui.Text("Using locations from: " .. locationsFile)
 		end
 
 		ImGui.Separator()
 
 		newLocationsFile = ImGui.InputText("", newLocationsFile, 50)
 		if ImGui.Button("Load New Locations File") then
-			locationsFile = newLocationsFile
-			switchLocationsFile(locationsFile)
-			statusMsg = "OK, loaded " .. locationsFile
+			if switchLocationsFile(newLocationsFile) then
+				statusMsg = "OK, loaded " .. newLocationsFile
+			else
+				statusMsg = "Error loading " .. newLocationsFile
+			end
 		end
+		ImGui.Text(statusMsg)
 		ImGui.Separator()
 		
 		if showRandomizer then
 			ImGui.Text("Randomizer:")
 			randomizerAmount = ImGui.InputInt("Packages", randomizerAmount, 100)
-			if ImGui.Button("Generate Randomizer") then
+			if ImGui.Button("Generate") then
 				switchLocationsFile(generateRandomPackages(randomizerAmount))
 				debugMsg("HP Randomizer done")
 			end
@@ -165,30 +182,41 @@ registerForEvent('onDraw', function()
 			showCreationWindow = true
 		end
 
-		if ImGui.Button("Scary Options") then
-			showScaryButtons = not showScaryButtons
-		end
-
-		if showScaryButtons then
-			ImGui.Separator()
-			ImGui.Text("Scary options:")
-			if ImGui.Button("Reload packages\n(" .. locationsFile .. ")") then
-				userData.packages = readHPLocations(locationsFile)
-			end
-			if countCollected() > 0 then
-				if ImGui.Button("Reset progress\n(" .. userData.locFile .. ")") then
-					clearProgress(userData.locFile)
-					reset()
-				end
-			end
-			ImGui.Separator()
-		end
-
 		if debugMode then
 			ImGui.Text(" *** DEBUG MODE ACTIVE ***")
 			ImGui.Text("isInGame: " .. tostring(isInGame))
-			ImGui.Text("userData pkgs: " .. tostring(LEX.tableLen(userData.packages)))
+			ImGui.Text("overrideLocations: " .. tostring(overrideLocations))
+			ImGui.Text("locationsFile: " .. locationsFile)
+			ImGui.Text("userData locFile: " .. userData.locFile)
+			ImGui.Text("userData packages: " .. tostring(LEX.tableLen(userData.packages)))
 			ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
+			ImGui.Text("countCollected(): " .. tostring(countCollected()))
+			ImGui.Separator()
+		end
+
+		if isInGame then
+
+			if ImGui.Button("Scary Options") then
+				showScaryButtons = not showScaryButtons
+			end
+
+			if showScaryButtons then
+				ImGui.Separator()
+				ImGui.Text("Scary options:")
+				if ImGui.Button("Load default packages\n(" .. locationsFile .. ")") then
+					switchLocationsFile(locationsFile)
+				end
+				if ImGui.Button("Reload packages\n(" .. userData.locFile .. ")") then
+					userData.packages = readHPLocations(locationsFile)
+				end
+				if countCollected() > 0 then
+					if ImGui.Button("Reset progress\n(" .. userData.locFile .. ")") then
+						clearProgress(userData.locFile)
+						reset()
+					end
+				end
+			end
+
 		end
 
 		ImGui.End()
@@ -301,7 +329,7 @@ function collectHP(packageIndex)
 	debugMsg("Collecting package " .. packageIndex)
 
 	local pkg = userData.packages[packageIndex]
-	table.insert(userData.collectedPackageIDs, pkg["id"])
+	table.insert(userData.collectedPackageIDs, pkg["identifier"])
 
 	if activeMappins[packageIndex] then -- unregister map pin if any
 		Game.GetMappinSystem():UnregisterMappin(activeMappins[packageIndex])
@@ -362,7 +390,7 @@ function readHPLocations(filename)
 
 		local hp = {}
 		-- id is based on coordinates so that the order of the lines in the packages file is not important and can be moved around later on
-		hp["id"] = filename .. ": x=" .. tostring(vals[1]) .. " y=" .. tostring(vals[2]) .. " z=" .. tostring(vals[3]) .. " w=" .. tostring(vals[4])
+		hp["identifier"] = filename .. ": x=" .. tostring(vals[1]) .. " y=" .. tostring(vals[2]) .. " z=" .. tostring(vals[3]) .. " w=" .. tostring(vals[4])
 		hp["x"] = tonumber(vals[1])
 		hp["y"] = tonumber(vals[2])
 		hp["z"] = tonumber(vals[3])
@@ -411,19 +439,24 @@ end
 function generateRandomPackages(n)
 	debugMsg("generating " .. n .. " random packages...")
 
-	local filename = tostring(n) .. " random packages (" .. os.date("%Y-%m-%d %H.%M.%S") .. ")"
+	local filename = tostring(n) .. " random packages (" .. os.date("%Y%m%d-%H%M%S") .. ")"
 	userData.packages = {}
 	local i = 1
+	local content = ""
 	while (i <= n) do
 		x = math.random(-2623, 3598)
 		y = math.random(-4011, 3640)
 		z = math.random(1, 120)
 		w = 1
 
-		appendLocationToFile(filename, x,y,z,w, "") -- extremely inefficient btw
+		content = content .. string.format("%.3f", x) .. " " .. string.format("%.3f", y) .. " " .. string.format("%.3f", z) .. " " .. tostring(w) .. "\n"
 
 		i = i + 1
 	end
+
+	local file = io.open(filename, "w")
+	file:write(content)
+	file:close()
 
 	-- save to file and return filename
 	return filename
@@ -488,7 +521,7 @@ function findNearestPackage(ignoreFound) --
 	local nearestPackage = false
 
 	for k,v in ipairs(userData.packages) do
-		if (LEX.tableHasValue(userData.collectedPackageIDs, v["id"]) == false) or (ignoreFound == false) then
+		if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) or (ignoreFound == false) then
 			
 			local distance = distanceToCoordinates(v["x"], v["y"], v["z"], v["w"])
 			
@@ -528,18 +561,21 @@ function markNearestPackage()
 end
 
 function switchLocationsFile(newFile)
-	if not isInGame then
-		-- can only be used in game as we manipulate session data
-		return
-	end
+	if LEX.fileExists(newFile) and not LEX.tableHasValue(reservedFilenames, newFile) then
 
-	if LEX.fileExists(newFile) then
-		userData.locFile = newFile
-		userData.packages = readHPLocations(newFile)
-		reset()
+		if isInGame then 
+			userData.locFile = newFile
+			userData.packages = readHPLocations(newFile)
+			reset()
+			overrideLocations = false
+		else
+			locationsFile = newFile
+			overrideLocations = true 
+		end
+
 		return true
 	else
-		debugMsg("switchLocationsFile() ERROR: " .. newFile .. " did not exist?")
+		debugMsg("switchLocationsFile() ERROR: " .. newFile .. " did not exist or is reserved filename")
 		return false
 	end
 end
@@ -555,7 +591,7 @@ function checkIfPlayerNearAnyPackage()
 
 		if ( d <= nearPackageRange ) then -- player is in spawning range of package
 
-			if (LEX.tableHasValue(userData.collectedPackageIDs, v["id"]) == false) or showCreationWindow then
+			if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) or showCreationWindow then
 				-- player has not collected package OR is in creation mode = should spawn the package
 
 				if not activePackages[k] then -- package is not already spawned
@@ -622,10 +658,10 @@ function clearProgress(LocFile)
 end
 
 function countCollected()
-	-- cant just check length of collectedNames as it may include packages from other location files
+	-- cant just check length of collectedPackageIDs as it may include packages from other location files
 	local c = 0
 	for k,v in ipairs(userData.packages) do
-		if LEX.tableHasValue(userData.collectedPackageIDs, v["id"]) then
+		if LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) then
 			c = c + 1
 		end
 	end
