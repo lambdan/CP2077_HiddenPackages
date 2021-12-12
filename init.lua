@@ -677,7 +677,7 @@ function checkIfPlayerNearAnyPackage()
 				if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected?
 
 					if showCreationWindow then -- no dont collect it because creation mode is active
-						GameHUD.ShowWarning("Simulated Package Collection")
+						GameHUD.ShowWarning("Simulated Package Collection (Package " .. tostring(k) .. ")")
 					else
 						-- yes, player is actually playing, lets get it 
 						collectHP(k)
@@ -751,3 +751,4 @@ function rewardAllPackages()
 	Game.AddToInventory("Items.money", 1000000)
 	debugMsg("rewardAllPackages() OK")
 end
+
