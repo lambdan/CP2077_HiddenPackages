@@ -584,6 +584,9 @@ function unmarkPackage(i)
       	activeMappins[i] = nil
         debugMsg("unmarkPackage(" .. tostring(i) .. ") = OK")
         return true
+    else
+    	debugMsg("unmarkPackage(" .. tostring(i) .. ") = marker not active")
+    	return false
     end
     debugMsg("unmarkPackage(" .. tostring(i) .. ") = error?")
     return false
