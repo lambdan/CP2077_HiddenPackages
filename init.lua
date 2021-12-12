@@ -57,6 +57,10 @@ end)
 
 registerHotkey("hp_toggle_create_window", "Toggle creation window", function()
 	showCreationWindow = not showCreationWindow
+	if showCreationWindow == false then
+		-- removes leftover packages
+		checkIfPlayerNearAnyPackage()
+	end
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -193,6 +197,30 @@ registerForEvent('onDraw', function()
 			ImGui.Text("userData packages: " .. tostring(LEX.tableLen(userData.packages)))
 			ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
 			ImGui.Text("countCollected(): " .. tostring(countCollected()))
+
+			if isInGame then
+				local NP = userData.packages[findNearestPackage(false)] -- false to ignore if its collected or not
+				if NP then
+					ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])) .. "M away")
+				end
+			end
+
+			local c = 0 
+			for k,v in ipairs(activePackages) do
+				if v then
+					c = c + 1
+				end
+			end
+			ImGui.Text("activePackages: " .. tostring(c))
+
+			local c = 0 
+			for k,v in ipairs(activeMappins) do
+				if v then
+					c = c + 1
+				end
+			end
+			ImGui.Text("activeMappins: " .. tostring(c))
+
 			if ImGui.Button("reset()") then
 				reset()
 			end
@@ -249,13 +277,9 @@ registerForEvent('onDraw', function()
 		ImGui.Text("Status: " .. Create_Message) -- status message
 
 		if isInGame then
+			checkIfPlayerNearAnyPackage()
 			ImGui.Text("Player Position:")
-			local gps = Game.GetPlayer():GetWorldPosition()
-			local position = {} -- ... so we'll convert into a traditional table
-			position["x"] = gps["x"]
-			position["y"] = gps["y"]
-			position["z"] = gps["z"]
-			position["w"] = gps["w"]
+			local position = Game.GetPlayer():GetWorldPosition()
 			ImGui.Text("X: " .. string.format("%.3f", position["x"]))
 			ImGui.SameLine()
 			ImGui.Text("\tY: " .. string.format("%.3f", position["y"]))
@@ -263,6 +287,10 @@ registerForEvent('onDraw', function()
 			ImGui.Text("Z: " .. string.format("%.3f", position["z"]))
 			ImGui.SameLine()
 			ImGui.Text("\tW: " .. tostring(position["w"]))
+
+			ImGui.Separator()
+			ImGui.Text("Currently loaded: " .. userData.locFile)
+			ImGui.Text("(" .. tostring(LEX.tableLen(userData.packages)) .. " packages)")
 
 			local NP = userData.packages[findNearestPackage(false)] -- false to ignore if its collected or not
 			if NP then
@@ -274,12 +302,7 @@ registerForEvent('onDraw', function()
 			Create_NewLocationComment = ImGui.InputText("Comment", Create_NewLocationComment, 50)
 			if ImGui.Button("Save This Location") then
 
-				local gps = Game.GetPlayer():GetWorldPosition()
-				local position = {}
-				position["x"] = gps["x"]
-				position["y"] = gps["y"]
-				position["z"] = gps["z"]
-				position["w"] = gps["w"]
+				local position = Game.GetPlayer():GetWorldPosition()
 				if appendLocationToFile(Create_NewCreationFile, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
 					HUDMessage("Location saved!")
 					Create_Message = "Location saved!"
@@ -292,7 +315,6 @@ registerForEvent('onDraw', function()
 
 			if ImGui.Button("Apply & Test") then
 				switchLocationsFile(Create_NewCreationFile)
-				checkIfPlayerNearAnyPackage()
 				Create_Message = tostring(LEX.tableLen(userData.packages)) .. " packages applied & loaded"
 			end
 			ImGui.Separator()
@@ -316,6 +338,7 @@ registerForEvent('onDraw', function()
 		ImGui.Text("Note: Packages aren\'t collected when you have this window open")
 		if ImGui.Button("Close") then
 			showCreationWindow = false
+			checkIfPlayerNearAnyPackage() -- cleans up any leftover packages
 		end
 
 		ImGui.End()
@@ -323,26 +346,61 @@ registerForEvent('onDraw', function()
 
 end)
 
+function spawnPackage(i)
+	debugMsg("spawnPackage(" .. tostring(i) .. ")")
+
+	if activePackages[i] then
+		debugMsg("spawnPackage(" .. tostring(i) .. ") = package already spawned")
+		return false
+	end
+
+	local pkg = userData.packages[i]
+	local entity = spawnObjectAtPos(pkg["x"], pkg["y"], pkg["z"]+propZboost, pkg["w"])
+	if entity then
+		activePackages[i] = entity
+		debugMsg("spawnPackage(" .. tostring(i) .. ") = OK")
+		return entity
+	else
+		debugMsg("spawnPackage(" .. tostring(i) .. ") = error with spawn")
+		return false
+	end
+end
+
 function spawnObjectAtPos(x,y,z,w)
 	if not isInGame then
 		return
 	end
 
     local transform = Game.GetPlayer():GetWorldTransform()
-    local pos = Game.GetPlayer():GetWorldPosition()
-    pos.x = x
-    pos.y = y
-    pos.z = z
-    pos.w = w
+    local pos = ToVector4{x=x, y=y, z=z, w=w}
     transform:SetPosition(pos)
 
     return WorldFunctionalTests.SpawnEntity(propPath, transform, '') -- returns ID
 end
 
+function despawnPackage(i) -- i = package index
+	debugMsg("despawnPackage(" .. tostring(i) .. ")")
+	if activePackages[i] then
+		if destroyObject(activePackages[i]) then
+			activePackages[i] = nil
+			debugMsg("despawnPackage(" .. tostring(i) .. ") = OK")
+			return true
+		else
+			debugMsg("despawnPackage(" .. tostring(i) .. ") = ERROR destroyObject()")
+			return false
+		end
+	end
+	debugMsg("despawnPackage(" .. tostring(i) .. ") = package not active")
+    return false
+end
+
 function destroyObject(e)
 	if Game.FindEntityByID(e) ~= nil then
         Game.FindEntityByID(e):GetEntity():Destroy()
+        debugMsg("destroyObject OK")
+        return true
     end
+    return false
 end
 
 function collectHP(packageIndex)
@@ -351,25 +409,20 @@ function collectHP(packageIndex)
 	local pkg = userData.packages[packageIndex]
 	table.insert(userData.collectedPackageIDs, pkg["identifier"])
 
-	if activeMappins[packageIndex] then -- unregister map pin if any
-		Game.GetMappinSystem():UnregisterMappin(activeMappins[packageIndex])
-		activeMappins[packageIndex] = nil
-	end
-
-	destroyObject(activePackages[packageIndex]) -- despawn 
+	destroyMappin(packageIndex)
+	despawnPackage(packageIndex)
 
     if countCollected() == LEX.tableLen(userData.packages) then
     	-- got em all
     	debugMsg("Got all packages")
-    	local msg = "All Hidden Packages collected!"
-    	GameHUD.ShowWarning(msg)
+    	GameHUD.ShowWarning("All Hidden Packages collected!")
     	rewardAllPackages()
     else
     	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LEX.tableLen(userData.packages))
     	GameHUD.ShowWarning(msg)
     end
 
-    debugMsg("Collected package " .. packageIndex)
+   	debugMsg("collectHP(" .. tostring(packageIndex) .. ") OK")
 end
 
 function reset()
@@ -381,8 +434,7 @@ end
 function destroyAllPackageObjects()
 	for k,v in ipairs(userData.packages) do
 		if activePackages[k] then
-			destroyObject(activePackages[k])
-			activePackages[k] = nil
+			despawnPackage(k)
 		end
 	end
 	debugMsg("destroyAll() OK")
@@ -447,12 +499,7 @@ function placeMapPin(x,y,z,w) -- from CET Snippets discord
 	mappinData.variant = gamedataMappinVariant.CustomPositionVariant -- see more types: https://github.com/WolvenKit/CyberCAT/blob/main/CyberCAT.Core/Enums/Dumped%20Enums/gamedataMappinVariant.cs
 	mappinData.visibleThroughWalls = true   
 
-	local position = Game.GetPlayer():GetWorldPosition()
-	position.x = x
-	position.y = y
-	position.z = z -- dont add propZboost to map pin, otherwise the waypoint covers up the prop 
-	position.w = w
-
+	local position = ToVector4{x=x, y=y, z=z, w=w}
 	return Game.GetMappinSystem():RegisterMappin(mappinData, position) -- returns ID
 end
 
@@ -516,14 +563,18 @@ end
 
 function removeAllMappins()
 	for k,v in ipairs(activeMappins) do
-		--print(k,v)
-		if activeMappins[k] then
-			Game.GetMappinSystem():UnregisterMappin(activeMappins[k])
-			activeMappins[k] = nil
-		end
+		destroyMappin(k)
 	end
 	debugMsg("removeAllMappins() OK")
 end
+
+function destroyMappin(i)
+	if activeMappins[i] then
+        Game.GetMappinSystem():UnregisterMappin(activeMappins[i])
+      	activeMappins[i] = nil
+        debugMsg("Unregistered mappin for pkg " .. tostring(i))
+    end
+end	
 
 function distanceToCoordinates(x,y,z,w)
 	local playerPosition = Game.GetPlayer():GetWorldPosition()
@@ -590,6 +641,8 @@ function switchLocationsFile(newFile)
 			reset()
 			overrideLocations = false
 			debugMsg("switchLocationsFile() " .. newFile .. "OK (in-game)")
+
+			checkIfPlayerNearAnyPackage()
 		else
 			locationsFile = newFile
 			overrideLocations = true
@@ -604,7 +657,7 @@ function switchLocationsFile(newFile)
 end
 
 function checkIfPlayerNearAnyPackage()
-	if not isInGame then
+	if isInGame == false then
 		return
 	end
 
@@ -618,29 +671,31 @@ function checkIfPlayerNearAnyPackage()
 				-- player has not collected package OR is in creation mode = should spawn the package
 
 				if not activePackages[k] then -- package is not already spawned
-					debugMsg("spawning package " .. k)
-					activePackages[k] = spawnObjectAtPos(v["x"], v["y"], v["z"]+propZboost, v["w"])
+					spawnPackage(k)
 				end
 
-				if d <= 0.5 and not inVehicle() then
+				if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected?
 
-					if showCreationWindow then
-						-- creation mode, dont collect it (messes with userdata collected packages)
+					if showCreationWindow then -- no dont collect it because creation mode is active
 						GameHUD.ShowWarning("Simulated Package Collection")
 					else
-						-- player is actually playing, lets get it 
+						-- yes, player is actually playing, lets get it 
 						collectHP(k)
 					end
 
 				end
+
+			else
+				-- package is collected or creation mode is not enabled
+				if activePackages[k] then -- package can be active here if player collected package and then opened and closed creation window
+					despawnPackage(k)
+				end
 			end
 
-		else
+		else -- player is outside of spawning range
 
-			if activePackages[k] then
-				debugMsg("DE-spawning package " .. k)
-				destroyObject(activePackages[k])
-				activePackages[k] = nil
+			if activePackages[k] then -- out of range, despawn the package if its active
+				despawnPackage(k)
 			end
 
 		end
@@ -694,5 +749,5 @@ end
 function rewardAllPackages()
 	-- TODO something more fun
 	Game.AddToInventory("Items.money", 1000000)
-	debugMsg("Reward!")
+	debugMsg("rewardAllPackages() OK")
 end
