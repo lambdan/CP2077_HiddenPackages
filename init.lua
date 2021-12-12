@@ -616,7 +616,7 @@ function findNearestPackage(ignoreFound)
 	for k,v in ipairs(userData.packages) do
 		if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) or (ignoreFound == false) then
 			
-			local distance = distanceToCoordinates(v["x"], v["y"], v["z"], v["w"])
+			local distance = distanceToPackage(k)
 			
 			if lowest == nil then
 				lowest = distance
@@ -683,7 +683,7 @@ function checkIfPlayerNearAnyPackage()
 
 	for k,v in ipairs(userData.packages) do
 
-		local d = distanceToCoordinates(v["x"], v["y"], v["z"], v["w"])
+		local d = distanceToPackage(k)
 
 		if ( d <= nearPackageRange ) then -- player is in spawning range of package
 
