@@ -199,9 +199,9 @@ registerForEvent('onDraw', function()
 			ImGui.Text("countCollected(): " .. tostring(countCollected()))
 
 			if isInGame then
-				local NP = userData.packages[findNearestPackage(false)] -- false to ignore if its collected or not
+				local NP = findNearestPackage(false) -- false to ignore if its collected or not
 				if NP then
-					ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])) .. "M away")
+					ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToPackage(NP)) .. "M away")
 				end
 			end
 
@@ -292,9 +292,9 @@ registerForEvent('onDraw', function()
 			ImGui.Text("Currently loaded: " .. userData.locFile)
 			ImGui.Text("(" .. tostring(LEX.tableLen(userData.packages)) .. " packages)")
 
-			local NP = userData.packages[findNearestPackage(false)] -- false to ignore if its collected or not
+			local NP = findNearestPackage(false) -- false to ignore if its collected or not
 			if NP then
-				ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToCoordinates(NP["x"],NP["y"],NP["z"],NP["w"])) .. "M away")
+				ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToPackage(NP)) .. "M away")
 			end
 
 			ImGui.Separator()
@@ -609,7 +609,7 @@ function distanceToCoordinates(x,y,z,w)
 	return math.sqrt( (x_distance*x_distance) + (y_distance*y_distance) + (z_distance*z_distance) ) -- pythagorean shit
 end
 
-function findNearestPackage(ignoreFound) -- 
+function findNearestPackage(ignoreFound)
 	local lowest = nil
 	local nearestPackage = false
 
@@ -644,7 +644,7 @@ function markNearestPackage()
 	local NP = findNearestPackage(true) -- true to ignore found packages
 	if NP then
 		markPackage(NP)
-		HUDMessage("Nearest Package Marked (" .. string.format("%.f", distanceToCoordinates(pkg["x"],pkg["y"],pkg["z"],pkg["w"])) .. "M away)")
+		HUDMessage("Nearest Package Marked (" .. string.format("%.f", distanceToPackage(NP)) .. "M away)")
 		return true
 	end
 	HUDMessage("No packages available")
@@ -772,3 +772,7 @@ function rewardAllPackages()
 	debugMsg("rewardAllPackages() OK")
 end
 
+function distanceToPackage(i)
+	local pkg = userData.packages[i]
+	return distanceToCoordinates(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
+end
