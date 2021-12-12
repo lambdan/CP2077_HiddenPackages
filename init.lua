@@ -322,7 +322,7 @@ registerForEvent('onDraw', function()
 			if ImGui.Button("Mark ALL packages on map") then
 				removeAllMappins()
 				for k,v in ipairs(userData.packages) do
-					activeMappins[k] = placeMapPin(v["x"], v["y"], v["z"], v["w"])
+					markPackage(k)
 				end
 			end
 
@@ -347,8 +347,6 @@ registerForEvent('onDraw', function()
 end)
 
 function spawnPackage(i)
-	debugMsg("spawnPackage(" .. tostring(i) .. ")")
-
 	if activePackages[i] then
 		debugMsg("spawnPackage(" .. tostring(i) .. ") = package already spawned")
 		return false
@@ -379,7 +377,6 @@ function spawnObjectAtPos(x,y,z,w)
 end
 
 function despawnPackage(i) -- i = package index
-	debugMsg("despawnPackage(" .. tostring(i) .. ")")
 	if activePackages[i] then
 		if destroyObject(activePackages[i]) then
 			activePackages[i] = nil
@@ -397,7 +394,6 @@ end
 function destroyObject(e)
 	if Game.FindEntityByID(e) ~= nil then
         Game.FindEntityByID(e):GetEntity():Destroy()
-        debugMsg("destroyObject OK")
         return true
     end
     return false
@@ -409,7 +405,7 @@ function collectHP(packageIndex)
 	local pkg = userData.packages[packageIndex]
 	table.insert(userData.collectedPackageIDs, pkg["identifier"])
 
-	destroyMappin(packageIndex)
+	unmarkPackage(packageIndex)
 	despawnPackage(packageIndex)
 
     if countCollected() == LEX.tableLen(userData.packages) then
@@ -428,6 +424,8 @@ end
 function reset()
 	destroyAllPackageObjects()
 	removeAllMappins()
+	activePackages = {}
+	activeMappins = {}
 	debugMsg("reset() OK")
 end
 
@@ -492,17 +490,6 @@ function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/
 	end
 end
 
-function placeMapPin(x,y,z,w) -- from CET Snippets discord
-	debugMsg("placing map pin at " ..  x .. " " .. y .. " " .. z .. " " ..w)
-	local mappinData = MappinData.new()
-	mappinData.mappinType = TweakDBID.new('Mappins.DefaultStaticMappin')
-	mappinData.variant = gamedataMappinVariant.CustomPositionVariant -- see more types: https://github.com/WolvenKit/CyberCAT/blob/main/CyberCAT.Core/Enums/Dumped%20Enums/gamedataMappinVariant.cs
-	mappinData.visibleThroughWalls = true   
-
-	local position = ToVector4{x=x, y=y, z=z, w=w}
-	return Game.GetMappinSystem():RegisterMappin(mappinData, position) -- returns ID
-end
-
 function generateRandomPackages(n)
 	debugMsg("generating " .. n .. " random packages...")
 
@@ -561,20 +548,55 @@ function appendLocationToFile(filename, x, y, z, w, comment)
 	return true
 end
 
-function removeAllMappins()
-	for k,v in ipairs(activeMappins) do
-		destroyMappin(k)
-	end
-	debugMsg("removeAllMappins() OK")
+function placeMapPin(x,y,z,w) -- from CET Snippets discord
+	debugMsg("placing map pin at " ..  x .. " " .. y .. " " .. z .. " " ..w)
+	local mappinData = MappinData.new()
+	mappinData.mappinType = TweakDBID.new('Mappins.DefaultStaticMappin')
+	mappinData.variant = gamedataMappinVariant.CustomPositionVariant -- see more types: https://github.com/WolvenKit/CyberCAT/blob/main/CyberCAT.Core/Enums/Dumped%20Enums/gamedataMappinVariant.cs
+	mappinData.visibleThroughWalls = true   
+
+	local position = ToVector4{x=x, y=y, z=z, w=w}
+	return Game.GetMappinSystem():RegisterMappin(mappinData, position) -- returns ID
 end
 
-function destroyMappin(i)
+function markPackage(i) -- i = package index
+	if activeMappins[i] then
+		debugMsg("markPackage(" .. tostring(i) .. ") = package already marked")
+		return false
+	end
+
+	local pkg = userData.packages[i]
+	local mappin_id = placeMapPin(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
+	if mappin_id then
+		activeMappins[i] = mappin_id
+		debugMsg("markPackage(" .. tostring(i) .. ") = OK")
+		return mappin_id
+	else
+		debugMsg("markPackage(" .. tostring(i) .. ") = error")
+		return false
+	end
+
+end
+
+function unmarkPackage(i)
 	if activeMappins[i] then
         Game.GetMappinSystem():UnregisterMappin(activeMappins[i])
       	activeMappins[i] = nil
-        debugMsg("Unregistered mappin for pkg " .. tostring(i))
+        debugMsg("unmarkPackage(" .. tostring(i) .. ") = OK")
+        return true
     end
+    debugMsg("unmarkPackage(" .. tostring(i) .. ") = error?")
+    return false
 end	
+
+function removeAllMappins()
+	for k,v in ipairs(userData.packages) do
+		if activeMappins[k] then
+			unmarkPackage(k)
+		end
+	end
+	debugMsg("removeAllMappins() OK")
+end
 
 function distanceToCoordinates(x,y,z,w)
 	local playerPosition = Game.GetPlayer():GetWorldPosition()
@@ -621,9 +643,7 @@ function markNearestPackage()
 
 	local NP = findNearestPackage(true) -- true to ignore found packages
 	if NP then
-		local pkg = userData.packages[NP]
-		activeMappins[NP] = placeMapPin(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
-		debugMsg("package #" .. NP .. " marked")
+		markPackage(NP)
 		HUDMessage("Nearest Package Marked (" .. string.format("%.f", distanceToCoordinates(pkg["x"],pkg["y"],pkg["z"],pkg["w"])) .. "M away)")
 		return true
 	end
@@ -711,7 +731,7 @@ function debugMsg(msg)
 
 	print("HP debug: " .. msg)
 	if isInGame then
-		HUDMessage("DEBUG: " .. msg)
+		HUDMessage("HP: " .. msg)
 	end
 end
 
