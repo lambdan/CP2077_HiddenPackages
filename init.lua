@@ -184,7 +184,7 @@ registerForEvent('onDraw', function()
 			ImGui.Separator()
 		end
 
-		if ImGui.Button("Package Placing Mode") then
+		if ImGui.Button("Creation Mode") then
 			showCreationWindow = true
 		end
 
@@ -272,7 +272,7 @@ registerForEvent('onDraw', function()
 
 
 	if showCreationWindow then
-		ImGui.Begin("Package Placing")
+		ImGui.Begin("Hidden Packages: Creation Mode")
 
 		ImGui.Text("Status: " .. Create_Message) -- status message
 
