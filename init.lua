@@ -1,8 +1,6 @@
--- Sessions Folder must exist or saving will fail
-
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "1.0.0"
+	version = "1.0.1"
 }
 
 local GameSession = require("Modules/GameSession.lua")
