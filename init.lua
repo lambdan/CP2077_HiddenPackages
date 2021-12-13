@@ -86,6 +86,11 @@ registerForEvent("onOverlayClose", function()
 end)
 
 registerForEvent('onInit', function()
+	if LEX.fileExists("DEBUG") then
+		debugMsg("DEBUG file found")
+		debugMode = true
+	end
+
 	GameSession.StoreInDir('Sessions')
 	GameSession.Persist(userData)
 	isInGame = Game.GetPlayer() and Game.GetPlayer():IsAttached() and not Game.GetSystemRequestsHandler():IsPreGame()
@@ -97,7 +102,7 @@ registerForEvent('onInit', function()
 		file:close()
 		if LEX.fileExists(overrideFile) and not LEX.tableHasValue(reservedFilenames, overrideFile) then
 			locationsFile = overrideFile
-			print("Loaded hidden packages file from DEFAULT: " .. locationsFile)
+			--print("Loaded hidden packages file from DEFAULT: " .. locationsFile)
 		end
 	end
 
@@ -164,11 +169,11 @@ registerForEvent('onDraw', function()
 		ImGui.Separator()
 
 		newLocationsFile = ImGui.InputText("", newLocationsFile, 50)
-		if ImGui.Button("Load New Locations File") then
+		if ImGui.Button("Load & Apply") then
 			if switchLocationsFile(newLocationsFile) then
-				statusMsg = "OK, loaded: " .. newLocationsFile
+				statusMsg = "OK, loaded " .. newLocationsFile
 			else
-				statusMsg = "Error loading: " .. newLocationsFile
+				statusMsg = "Error loading " .. newLocationsFile
 			end
 		end
 		ImGui.Text(statusMsg)
@@ -206,7 +211,7 @@ registerForEvent('onDraw', function()
 			end
 
 			local c = 0 
-			for k,v in ipairs(activePackages) do
+			for k,v in pairs(activePackages) do
 				if v then
 					c = c + 1
 				end
@@ -214,7 +219,7 @@ registerForEvent('onDraw', function()
 			ImGui.Text("activePackages: " .. tostring(c))
 
 			local c = 0 
-			for k,v in ipairs(activeMappins) do
+			for k,v in pairs(activeMappins) do
 				if v then
 					c = c + 1
 				end
@@ -239,25 +244,27 @@ registerForEvent('onDraw', function()
 				ImGui.Text("Warning: One click is all you need.\nNo confirmations!")
 
 				if ImGui.Button("Load DEFAULT packages\n(" .. locationsFile .. ")") then
-					reset()
 					switchLocationsFile(locationsFile)
 				end
 
-				if ImGui.Button("Reload packages\n(" .. userData.locFile .. ")") then
+				if ImGui.Button("Reload current packages\n(" .. userData.locFile .. ")") then
 					userData.packages = readHPLocations(userData.locFile)
 				end
 
 				if countCollected() > 0 then
 					if ImGui.Button("Reset progress\n(" .. userData.locFile .. ")") then
-						clearProgress(userData.locFile)
 						reset()
+						clearProgress(userData.locFile)
+						checkIfPlayerNearAnyPackage()
 					end
+					ImGui.SameLine()
 				end
 
 				if LEX.tableLen(userData.collectedPackageIDs) > 0 then
-					if ImGui.Button("Reset ALL progress") then
-						userData.collectedPackageIDs = {}
+					if ImGui.Button("Reset progress\n(all location files)") then
 						reset()
+						userData.collectedPackageIDs = {}
+						checkIfPlayerNearAnyPackage()
 					end
 				end
 
@@ -321,7 +328,7 @@ registerForEvent('onDraw', function()
 
 			if ImGui.Button("Mark ALL packages on map") then
 				removeAllMappins()
-				for k,v in ipairs(userData.packages) do
+				for k,v in pairs(userData.packages) do
 					markPackage(k)
 				end
 			end
@@ -400,10 +407,15 @@ function destroyObject(e)
 end
 
 function collectHP(packageIndex)
-	debugMsg("Collecting package " .. packageIndex)
+	debugMsg("collectHP(" .. tostring(packageIndex) .. ")")
 
 	local pkg = userData.packages[packageIndex]
-	table.insert(userData.collectedPackageIDs, pkg["identifier"])
+
+	if not LEX.tableHasValue(userData.collectedPackageIDs, pkg["identifier"]) then
+		table.insert(userData.collectedPackageIDs, pkg["identifier"])
+	else
+		debugMsg("HMM, this package seems to already be collected???")
+	end
 
 	unmarkPackage(packageIndex)
 	despawnPackage(packageIndex)
@@ -427,10 +439,11 @@ function reset()
 	activePackages = {}
 	activeMappins = {}
 	debugMsg("reset() OK")
+	return true
 end
 
 function destroyAllPackageObjects()
-	for k,v in ipairs(userData.packages) do
+	for k,v in pairs(userData.packages) do
 		if activePackages[k] then
 			despawnPackage(k)
 		end
@@ -593,7 +606,7 @@ function unmarkPackage(i)
 end	
 
 function removeAllMappins()
-	for k,v in ipairs(userData.packages) do
+	for k,v in pairs(userData.packages) do
 		if activeMappins[k] then
 			unmarkPackage(k)
 		end
@@ -616,7 +629,7 @@ function findNearestPackage(ignoreFound)
 	local lowest = nil
 	local nearestPackage = false
 
-	for k,v in ipairs(userData.packages) do
+	for k,v in pairs(userData.packages) do
 		if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) or (ignoreFound == false) then
 			
 			local distance = distanceToPackage(k)
@@ -656,25 +669,25 @@ end
 
 function switchLocationsFile(newFile)
 	if LEX.fileExists(newFile) and not LEX.tableHasValue(reservedFilenames, newFile) then
-		debugMsg("switchLocationsFile() " .. newFile)
+		debugMsg("switchLocationsFile(" .. newFile .. ")")
 
 		if isInGame then 
+			reset()
 			userData.locFile = newFile
 			userData.packages = readHPLocations(newFile)
-			reset()
+			
 			overrideLocations = false
-			debugMsg("switchLocationsFile() " .. newFile .. "OK (in-game)")
-
+			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (ingame)")
 			checkIfPlayerNearAnyPackage()
 		else
 			locationsFile = newFile
 			overrideLocations = true
-			debugMsg("switchLocationsFile() " .. newFile .. "OK (NOT in game)")
+			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (not ingame)")
 		end
 
 		return true
 	else
-		debugMsg("switchLocationsFile() ERROR: " .. newFile .. " did not exist or is reserved filename")
+		debugMsg("switchLocationsFile(" .. newFile .. ") = error (file not exist or reserved)")
 		return false
 	end
 end
@@ -684,7 +697,7 @@ function checkIfPlayerNearAnyPackage()
 		return
 	end
 
-	for k,v in ipairs(userData.packages) do
+	for k,v in pairs(userData.packages) do
 
 		local d = distanceToPackage(k)
 
@@ -750,18 +763,26 @@ function HUDMessage(msg)
 end
 
 function clearProgress(LocFile)
-	for k,v in ipairs(userData.collectedPackageIDs) do
-		if LEX.stringStarts(v,LocFile .. ":") then -- galaxy brain move to use a : as its not allowed in filenames
-			debugMsg("uncollected " ..  k .. v)
-			table.remove(userData.collectedPackageIDs,k)
+	local c = 0
+	local clearedTable = {}
+	debugMsg("clearProgress(" .. LocFile .. ") - before: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
+	for k,v in pairs(userData.collectedPackageIDs) do
+		if not LEX.stringStarts(v, LocFile .. ":") then
+			-- package is not from LocFile, add it to the new (cleared) table
+			table.insert(clearedTable, v)
+		else
+			c = c + 1 -- package is from LocFile and we DO NOT want it back = count it
 		end
 	end
+	userData.collectedPackageIDs = clearedTable
+	debugMsg("clearProgress(" .. LocFile .. ") - after: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)) .. " (uncollected: " .. tostring(c) .. ")")
+	--debugMsg("clearProgress(" .. LocFile .. ") - uncollected " .. tostring(c) .. " pkgs")
 end
 
 function countCollected()
 	-- cant just check length of collectedPackageIDs as it may include packages from other location files
 	local c = 0
-	for k,v in ipairs(userData.packages) do
+	for k,v in pairs(userData.packages) do
 		if LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) then
 			c = c + 1
 		end
