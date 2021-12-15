@@ -613,14 +613,7 @@ function removeAllMappins()
 end
 
 function distanceToCoordinates(x,y,z,w)
-	local playerPosition = Game.GetPlayer():GetWorldPosition()
-	
-	local x_distance = math.abs(playerPosition["x"] - x)
-	local y_distance = math.abs(playerPosition["y"] - y)
-	local z_distance = math.abs(playerPosition["z"] - z)
-	-- ignore w for now, seems to always be 1
-	
-	return math.sqrt( (x_distance*x_distance) + (y_distance*y_distance) + (z_distance*z_distance) ) -- pythagorean shit
+	return Vector4.Distance(Game.GetPlayer():GetWorldPosition(), ToVector4{x=x, y=y, z=z, w=w})
 end
 
 function findNearestPackage(ignoreFound)
