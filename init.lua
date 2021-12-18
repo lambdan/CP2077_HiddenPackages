@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "1.0.2"
+	version = "1.0.3"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -49,6 +49,9 @@ local activePackages = {}
 local isInGame = false
 local newLocationsFile = userData.locFile -- used for text field in regular window
 
+local lastCheck = 0
+local checkThrottle = 1
+
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
 end)
@@ -81,6 +84,10 @@ end)
 registerForEvent("onOverlayClose", function()
 	showWindow = false
 	showScaryButtons = false
+end)
+
+registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
+    reset()
 end)
 
 registerForEvent('onInit', function()
@@ -135,7 +142,7 @@ registerForEvent('onInit', function()
     end)
 
     Observe('PlayerPuppet', 'OnAction', function(action) -- any player action
-        checkIfPlayerNearAnyPackage()
+    	checkIfPlayerNearAnyPackage()
     end)
 
 end)
@@ -200,6 +207,7 @@ registerForEvent('onDraw', function()
 			ImGui.Text("userData packages: " .. tostring(LEX.tableLen(userData.packages)))
 			ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
 			ImGui.Text("countCollected(): " .. tostring(countCollected()))
+			ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
 
 			if isInGame then
 				local NP = findNearestPackage(false) -- false to ignore if its collected or not
@@ -688,9 +696,22 @@ function checkIfPlayerNearAnyPackage()
 		return
 	end
 
+	if (os.clock() - lastCheck) < checkThrottle then
+		return
+	else
+		lastCheck = os.clock()
+		debugMsg("check at " .. tostring(lastCheck))
+	end
+
+	local distanceToNearestPackage = nil
+
 	for k,v in pairs(userData.packages) do
 
 		local d = distanceToPackage(k)
+
+		if distanceToNearestPackage == nil or d < distanceToNearestPackage then
+			distanceToNearestPackage = d
+		end
 
 		if ( d <= nearPackageRange ) then -- player is in spawning range of package
 
@@ -717,6 +738,8 @@ function checkIfPlayerNearAnyPackage()
 				if activePackages[k] then -- package can be active here if player collected package and then opened and closed creation window
 					despawnPackage(k)
 				end
+
+				distanceToNearestPackage = nil
 			end
 
 		else -- player is outside of spawning range
@@ -726,6 +749,23 @@ function checkIfPlayerNearAnyPackage()
 			end
 
 		end
+	end
+
+	if distanceToNearestPackage ~= nil then
+
+		-- adjust checkThrottle based on distance to nearest package
+		if distanceToNearestPackage < 2 then -- extremely close = spam the check
+			checkThrottle = 0.1
+		elseif distanceToNearestPackage < 25 then
+			checkThrottle = 0.5
+		elseif distanceToNearestPackage < 50 then
+			checkThrottle = 1
+		elseif distanceToNearestPackage < 100 then
+			checkThrottle = 2
+		else
+			checkThrottle = 4 -- far away from any package = zzzzz
+		end
+
 	end
 
 end
