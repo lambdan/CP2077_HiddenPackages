@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "1.0.3"
+	version = "1.0.3.1"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -444,6 +444,7 @@ function reset()
 	removeAllMappins()
 	activePackages = {}
 	activeMappins = {}
+	lastCheck = 0
 	debugMsg("reset() OK")
 	return true
 end
@@ -766,6 +767,8 @@ function checkIfPlayerNearAnyPackage()
 			checkThrottle = 4 -- far away from any package = zzzzz
 		end
 
+	else
+		checkThrottle = 1 -- otherwise checkThrottle stuck at the spam value when all packages are collected
 	end
 
 end
