@@ -52,6 +52,11 @@ local newLocationsFile = userData.locFile -- used for text field in regular wind
 local lastCheck = 0
 local checkThrottle = 1
 
+local showPerformanceWindow = false
+local performanceTextbox1 = "text 1"
+local performanceTextbox2 = "text 2"
+local performanceTextbox3 = "text 3"
+
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
 end)
@@ -148,6 +153,16 @@ registerForEvent('onInit', function()
 end)
 
 registerForEvent('onDraw', function()
+
+	if showPerformanceWindow then
+		ImGui.Begin("Hidden Packages - Performance")
+		ImGui.Text("packages: " .. tostring(LEX.tableLen(userData.packages)))
+		ImGui.Text(performanceTextbox1)
+		ImGui.Text(performanceTextbox2)
+		ImGui.Text(performanceTextbox3)
+		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
+		ImGui.End()
+	end
 
 	if showWindow then
 		ImGui.Begin("Hidden Packages")
@@ -621,18 +636,15 @@ function removeAllMappins()
 	debugMsg("removeAllMappins() OK")
 end
 
-function distanceToCoordinates(x,y,z,w)
-	return Vector4.Distance(Game.GetPlayer():GetWorldPosition(), ToVector4{x=x, y=y, z=z, w=w})
-end
-
 function findNearestPackage(ignoreFound)
 	local lowest = nil
 	local nearestPackage = false
+	local playerPos = Game.GetPlayer():GetWorldPosition()
 
 	for k,v in pairs(userData.packages) do
 		if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) or (ignoreFound == false) then
 			
-			local distance = distanceToPackage(k)
+			local distance = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
 			
 			if lowest == nil then
 				lowest = distance
@@ -704,17 +716,31 @@ function checkIfPlayerNearAnyPackage()
 		debugMsg("check at " .. tostring(lastCheck))
 	end
 
+	local loopStarted = os.clock()
+
 	local distanceToNearestPackage = nil
 
+	local playerPos = Game.GetPlayer():GetWorldPosition()
+
 	for k,v in pairs(userData.packages) do
+		local d = nil
 
-		local d = distanceToPackage(k)
-
-		if distanceToNearestPackage == nil or d < distanceToNearestPackage then
-			distanceToNearestPackage = d
+		if math.abs(playerPos["x"] - v["x"]) <= nearPackageRange then
+			if math.abs(playerPos["y"] - v["y"]) <= nearPackageRange then
+				if math.abs(playerPos["z"] - v["z"]) <= nearPackageRange then
+					-- only bother calculating exact distance if we are in the neighborhood
+					d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
+				end
+			end
 		end
 
-		if ( d <= nearPackageRange ) then -- player is in spawning range of package
+		if d ~= nil then
+			if distanceToNearestPackage == nil or d < distanceToNearestPackage then
+				distanceToNearestPackage = d
+			end
+		end
+
+		if d ~= nil and d <= nearPackageRange then -- player is in spawning range of package
 
 			if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) or showCreationWindow then
 				-- player has not collected package OR is in creation mode = should spawn the package
@@ -723,7 +749,7 @@ function checkIfPlayerNearAnyPackage()
 					spawnPackage(k)
 				end
 
-				if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected?
+				if (d <= 0.75) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected?
 
 					if showCreationWindow then -- no dont collect it because creation mode is active
 						GameHUD.ShowWarning("Simulated Package Collection (Package " .. tostring(k) .. ")")
@@ -754,22 +780,25 @@ function checkIfPlayerNearAnyPackage()
 
 	if distanceToNearestPackage ~= nil then
 
+
 		-- adjust checkThrottle based on distance to nearest package
-		if distanceToNearestPackage < 2 then -- extremely close = spam the check
+		if distanceToNearestPackage < 3 then -- extremely close = spam the check
 			checkThrottle = 0.1
 		elseif distanceToNearestPackage < 25 then
-			checkThrottle = 0.5
+			checkThrottle = 0.25
 		elseif distanceToNearestPackage < 50 then
-			checkThrottle = 1
-		elseif distanceToNearestPackage < 100 then
-			checkThrottle = 2
+			checkThrottle = 0.5
 		else
-			checkThrottle = 4 -- far away from any package = zzzzz
+			checkThrottle = 1
 		end
 
 	else
 		checkThrottle = 1 -- otherwise checkThrottle stuck at the spam value when all packages are collected
 	end
+
+	local loopTime = os.clock() - loopStarted
+	performanceTextbox1 = tostring(1/loopTime) .. "/s"
+	performanceTextbox2 = tostring(loopTime) .. "ms"
 
 end
 
@@ -833,4 +862,8 @@ end
 function distanceToPackage(i)
 	local pkg = userData.packages[i]
 	return distanceToCoordinates(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
+end
+
+function distanceToCoordinates(x,y,z,w)
+	return Vector4.Distance(Game.GetPlayer():GetWorldPosition(), ToVector4{x=x, y=y, z=z, w=w})
 end
