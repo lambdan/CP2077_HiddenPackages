@@ -24,6 +24,16 @@ function LEX.tableLen(table)
     return i
 end
 
+function LEX.tableAvg(table)
+    local sum = 0
+    local c = 0
+    for k,v in pairs(table) do
+        sum = sum + v
+        c = c + 1
+    end
+    return sum/c
+end 
+
 function LEX.stringStarts(String,Start) -- https://stackoverflow.com/a/22831842
    return string.sub(String,1,string.len(Start))==Start
 end

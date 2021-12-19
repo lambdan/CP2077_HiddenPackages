@@ -8,7 +8,7 @@ local GameUI = require("Modules/GameUI.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
-local reservedFilenames = {"DEBUG", "RANDOMIZER", "DEFAULT", "init.lua", "db.sqlite3", "Hidden Packages.log"}
+local reservedFilenames = {"DEBUG", "RANDOMIZER", "PERFORMANCE", "DEFAULT", "init.lua", "db.sqlite3", "Hidden Packages.log"}
 
 local locationsFile = "packages1" -- default/fallback packages file, will be overriden by packages file named in DEFAULT
 local overrideLocations = false
@@ -53,6 +53,7 @@ local lastCheck = 0
 local checkThrottle = 1
 
 local showPerformanceWindow = false
+local loopTimesAvg = {}
 local performanceTextbox1 = "text 1"
 local performanceTextbox2 = "text 2"
 local performanceTextbox3 = "text 3"
@@ -81,6 +82,12 @@ registerForEvent("onOverlayOpen", function()
 		showRandomizer = true
 	else
 		showRandomizer = false
+	end
+
+	if LEX.fileExists("PERFORMANCE") or debugMode then
+		showPerformanceWindow = true
+	else
+		showPerformanceWindow = false
 	end
 
 	showWindow = true
@@ -711,23 +718,21 @@ function switchLocationsFile(newFile)
 end
 
 function checkIfPlayerNearAnyPackage()
+	local loopStarted = os.clock()
+
 	if isInGame == false then
 		return
 	end
 
-	if (os.clock() - lastCheck) < checkThrottle then
+	if (loopStarted - lastCheck) < checkThrottle then
 		return
 	else
-		lastCheck = os.clock()
+		lastCheck = loopStarted
 		debugMsg("check at " .. tostring(lastCheck))
 	end
 
-	local loopStarted = os.clock()
-
 	local distanceToNearestPackage = nil
-
 	local playerPos = Game.GetPlayer():GetWorldPosition()
-
 	for k,v in pairs(userData.packages) do
 		local d = nil
 
@@ -802,9 +807,20 @@ function checkIfPlayerNearAnyPackage()
 		checkThrottle = 1 -- otherwise checkThrottle stuck at the spam value when all packages are collected
 	end
 
-	local loopTime = os.clock() - loopStarted
-	performanceTextbox1 = tostring(1/loopTime) .. "/s"
-	performanceTextbox2 = tostring(loopTime) .. "ms"
+
+
+	if showPerformanceWindow then
+		local loopTime = os.clock() - loopStarted
+		
+		table.insert(loopTimesAvg, loopTime)
+		if LEX.tableLen(loopTimesAvg) > 100 then
+			table.remove(loopTimesAvg, 0)
+			performanceTextbox3 = "avg: " .. tostring(LEX.tableAvg(loopTimesAvg)) .. "ms"
+		end
+
+		performanceTextbox1 = "speed: " .. tostring(1/loopTime) .. "/s"
+		performanceTextbox2 = "last loop: " .. tostring(loopTime) .. "ms"
+	end
 
 end
 
