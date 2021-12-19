@@ -38,26 +38,31 @@ local Create_Message = ""
 local randomizerAmount = 100
 local nearPackageRange = 100 -- if player this near to package then spawn it (and despawn when outside)
 
---local propPath = "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent" -- spinning red arasaka logo... propzboost = 0.5 recommended
-local propPath = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent" -- blue hologram cubes
---local propPath = "base/environment/ld_kit/marker_blue_small.ent" -- lol
-local propZboost = 0.25 -- lifts prop a bit above ground
-
+-- props
+local PACKAGE_PROP = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent"
+local PACKAGE_PROP_Z_BOOST = 0.25
 
 -- inits
 local activeMappins = {} -- object ids for map pins
 local activePackages = {}
 local isInGame = false
+local isPaused = true
 local newLocationsFile = userData.locFile -- used for text field in regular window
 
 local lastCheck = 0
+local lastAudioHint = 0
 local checkThrottle = 1
 
+-- performance stuff
 local showPerformanceWindow = false
 local loopTimesAvg = {}
 local performanceTextbox1 = "text 1"
 local performanceTextbox2 = "text 2"
 local performanceTextbox3 = "text 3"
+
+-- hint stuff
+local AUDIO_HINT_RANGE = 200
+local AUDIO_HINT_ENABLED = true
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
@@ -131,6 +136,7 @@ registerForEvent('onInit', function()
         -- (after the loading screen for "Load Game" or "New Game")
         debugMsg('Game Session Started')
         isInGame = true
+        isPaused = false
         LOADED_PACKAGES = readHPLocations(userData.locFile)
 
         -- check if old userData.packages exist and if so clear it
@@ -163,8 +169,18 @@ registerForEvent('onInit', function()
         -- should maybe wipe userData here but it gets properly set when starting a new game or loading a game anyway so not sure its necessary
     end)
 
+	GameSession.OnPause(function()
+		isPaused = true
+	end)
+
+	GameSession.OnResume(function()
+		isPaused = false
+	end)
+
     Observe('PlayerPuppet', 'OnAction', function(action) -- any player action
-    	checkIfPlayerNearAnyPackage()
+    	if not isPaused and isInGame then
+    		checkIfPlayerNearAnyPackage()
+    	end
     end)
 
 end)
@@ -396,7 +412,7 @@ function spawnPackage(i)
 	end
 
 	local pkg = LOADED_PACKAGES[i]
-	local entity = spawnObjectAtPos(pkg["x"], pkg["y"], pkg["z"]+propZboost, pkg["w"])
+	local entity = spawnObjectAtPos(pkg["x"], pkg["y"], pkg["z"]+PACKAGE_PROP_Z_BOOST, pkg["w"], PACKAGE_PROP)
 	if entity then
 		activePackages[i] = entity
 		debugMsg("spawnPackage(" .. tostring(i) .. ") = OK")
@@ -407,7 +423,7 @@ function spawnPackage(i)
 	end
 end
 
-function spawnObjectAtPos(x,y,z,w)
+function spawnObjectAtPos(x,y,z,w, prop)
 	if not isInGame then
 		return
 	end
@@ -416,7 +432,7 @@ function spawnObjectAtPos(x,y,z,w)
     local pos = ToVector4{x=x, y=y, z=z, w=w}
     transform:SetPosition(pos)
 
-    return WorldFunctionalTests.SpawnEntity(propPath, transform, '') -- returns ID
+    return WorldFunctionalTests.SpawnEntity(prop, transform, '') -- returns ID
 end
 
 function despawnPackage(i) -- i = package index
@@ -464,6 +480,9 @@ function collectHP(packageIndex)
     else
     	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LEX.tableLen(LOADED_PACKAGES))
     	GameHUD.ShowWarning(msg)
+    	--Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
+    	--HUDMessage(msg)
+
     end
 
    	debugMsg("collectHP(" .. tostring(packageIndex) .. ") OK")
@@ -745,14 +764,19 @@ function checkIfPlayerNearAnyPackage()
 		debugMsg("check at " .. tostring(lastCheck))
 	end
 
+	local checkRange = nearPackageRange
+	if AUDIO_HINT_ENABLED and AUDIO_HINT_RANGE > checkRange then
+		checkRange = AUDIO_HINT_RANGE
+	end
+
 	local distanceToNearestPackage = nil
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 	for k,v in pairs(LOADED_PACKAGES) do
 		local d = nil
 
-		if math.abs(playerPos["x"] - v["x"]) <= nearPackageRange then
-			if math.abs(playerPos["y"] - v["y"]) <= nearPackageRange then
-				if math.abs(playerPos["z"] - v["z"]) <= nearPackageRange then
+		if math.abs(playerPos["x"] - v["x"]) <= checkRange then
+			if math.abs(playerPos["y"] - v["y"]) <= checkRange then
+				if math.abs(playerPos["z"] - v["z"]) <= checkRange then
 					-- only bother calculating exact distance if we are in the neighborhood
 					d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
 				end
@@ -763,6 +787,10 @@ function checkIfPlayerNearAnyPackage()
 			if distanceToNearestPackage == nil or d < distanceToNearestPackage then
 				distanceToNearestPackage = d
 			end
+		end
+
+		if AUDIO_HINT_ENABLED and d ~= nil and d <= AUDIO_HINT_RANGE and (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) then
+			audioHint(k)
 		end
 
 		if d ~= nil and d <= nearPackageRange then -- player is in spawning range of package
@@ -807,12 +835,12 @@ function checkIfPlayerNearAnyPackage()
 
 
 		-- adjust checkThrottle based on distance to nearest package
-		if distanceToNearestPackage < 3 then -- extremely close = spam the check
-			checkThrottle = 0.1
-		elseif distanceToNearestPackage < 25 then
-			checkThrottle = 0.25
-		elseif distanceToNearestPackage < 50 then
-			checkThrottle = 0.5
+		if distanceToNearestPackage <= checkRange then
+			checkThrottle = distanceToNearestPackage / 100
+			
+			if checkThrottle < 0.1 then
+				checkThrottle = 0.1
+			end
 		else
 			checkThrottle = 1
 		end
@@ -902,4 +930,12 @@ end
 
 function distanceToCoordinates(x,y,z,w)
 	return Vector4.Distance(Game.GetPlayer():GetWorldPosition(), ToVector4{x=x, y=y, z=z, w=w})
+end
+
+function audioHint(i)
+	if (os.clock() - lastAudioHint) < 0.1 or showCreationWindow or isPaused then
+		return
+	end
+	Game.GetAudioSystem():Play('ui_hacking_access_granted')
+	lastAudioHint = os.clock()
 end
