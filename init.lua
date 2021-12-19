@@ -4,24 +4,30 @@ local HiddenPackagesMetadata = {
 }
 
 local GameSession = require("Modules/GameSession.lua")
-local GameUI = require("Modules/GameUI.lua")
+--local GameUI = require("Modules/GameUI.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
-local reservedFilenames = {"DEBUG", "RANDOMIZER", "PERFORMANCE", "DEFAULT", "init.lua", "db.sqlite3", "Hidden Packages.log"}
-
-local locationsFile = "packages1" -- default/fallback packages file, will be overriden by packages file named in DEFAULT
-local overrideLocations = false
+local reservedFilenames = {"SETTINGS.json", "DEBUG", "RANDOMIZER", "PERFORMANCE", "DEFAULT", "init.lua", "db.sqlite3", "Hidden Packages.log"}
+local defaultLocationsFile = "packages1"
 
 local userData = {
-	locFile = "packages1",
+	locFile = defaultLocationsFile,
 	collectedPackageIDs = {}
 }
 
-local LOADED_PACKAGES = {}
+local MOD_SETTINGS = {
+	DebugMode = false,
+	RandomizerShown = false,
+	RandomizerAmount = 100,
+	ShowPerformanceWindow = false,
+	CreationModeFile = "created",
+	NearPackageRange = 100,
+	HintAudioEnabled = false,
+	HintAudioRange = 200
+}
 
-local debugMode = false
-local showRandomizer = false
+local LOADED_PACKAGES = {}
 
 local HUDMessage_Current = ""
 local HUDMessage_Last = 0
@@ -31,12 +37,9 @@ local showWindow = false
 local showCreationWindow = false
 local showScaryButtons = false
 
-local Create_NewCreationFile = "created"
+local Create_NewCreationFile = MOD_SETTINGS.CreationModeFile
 local Create_NewLocationComment = ""
 local Create_Message = ""
-
-local randomizerAmount = 100
-local nearPackageRange = 100 -- if player this near to package then spawn it (and despawn when outside)
 
 -- props
 local PACKAGE_PROP = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent"
@@ -54,15 +57,11 @@ local lastAudioHint = 0
 local checkThrottle = 1
 
 -- performance stuff
-local showPerformanceWindow = false
 local loopTimesAvg = {}
 local performanceTextbox1 = "text 1"
 local performanceTextbox2 = "text 2"
 local performanceTextbox3 = "text 3"
 
--- hint stuff
-local AUDIO_HINT_RANGE = 200
-local AUDIO_HINT_ENABLED = true
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
@@ -77,31 +76,11 @@ registerHotkey("hp_toggle_create_window", "Toggle creation window", function()
 end)
 
 registerForEvent("onOverlayOpen", function()
-
-	if LEX.fileExists("DEBUG") then
-		debugMode = true
-	else
-		debugMode = false
-	end
-
-	if LEX.fileExists("RANDOMIZER") or debugMode then
-		showRandomizer = true
-	else
-		showRandomizer = false
-	end
-
-	if LEX.fileExists("PERFORMANCE") or debugMode then
-		showPerformanceWindow = true
-	else
-		showPerformanceWindow = false
-	end
-
 	showWindow = true
 end)
 
 registerForEvent("onOverlayClose", function()
 	showWindow = false
-	showScaryButtons = false
 end)
 
 registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
@@ -109,27 +88,52 @@ registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
 end)
 
 registerForEvent('onInit', function()
-
-	if LEX.fileExists("DEBUG") then
-		debugMsg("DEBUG file found")
-		debugMode = true
-		showPerformanceWindow = true
+	if loadSettings() then
+		print("Hidden Packages: loaded settings")
+	else
+		print("Hidden Packages: no settings file found, using defaults")
 	end
+
+	-- generate NativeSettings
+	nativeSettings = GetMod("nativeSettings")
+	nativeSettings.addTab("/Hidden Packages", "Hidden Packages")
+
+	nativeSettings.addSubcategory("/Hidden Packages/AudioHints", "Audio Hints")
+
+	nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Audio Hint", "Plays a sound when you are near a package, in increasing frequency the closer you get close to the package", MOD_SETTINGS.HintAudioEnabled, false, function(state)
+		MOD_SETTINGS.HintAudioEnabled = state
+		saveSettings()
+	end)
+
+	nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Audio Hint Range", "Start playing audio hint when this close to a package", 50, 500, 1, MOD_SETTINGS.HintAudioRange, 200, function(value)
+		MOD_SETTINGS.HintAudioRange = value
+		saveSettings()
+	end)
+
+	nativeSettings.addSubcategory("/Hidden Packages/Advanced", "Advanced / Development")
+
+	nativeSettings.addRangeInt("/Hidden Packages/Advanced", "Near Package Range", "Spawn package when this close to one", 10, 200, 1, MOD_SETTINGS.NearPackageRange, 100, function(value)
+		MOD_SETTINGS.NearPackageRange = value
+		saveSettings()
+	end)
+
+	nativeSettings.addSwitch("/Hidden Packages/Advanced", "Debug Mode", "Enables debug mode (spams messages about what is going on)", MOD_SETTINGS.DebugMode, false, function(state)
+		MOD_SETTINGS.DebugMode = state
+		saveSettings()
+	end)
+	nativeSettings.addSwitch("/Hidden Packages/Advanced", "Show Randomizer", "Enables the (dumb) randomizer in the CET overlay", MOD_SETTINGS.RandomizerShown, false, function(state)
+		MOD_SETTINGS.RandomizerShown = state
+		saveSettings()
+	end) 
+	nativeSettings.addSwitch("/Hidden Packages/Advanced", "Show Performance Window", "Show performance metrics", MOD_SETTINGS.ShowPerformanceWindow, false, function(state)
+		MOD_SETTINGS.ShowPerformanceWindow = state
+		saveSettings()
+	end)
+	-- end NativeSettings
 
 	GameSession.StoreInDir('Sessions')
 	GameSession.Persist(userData)
 	isInGame = Game.GetPlayer() and Game.GetPlayer():IsAttached() and not Game.GetSystemRequestsHandler():IsPreGame()
-
-	-- check if file DEFAULT exists and if so load default packages file from there
-	if LEX.fileExists("DEFAULT") then
-		local file = io.open("DEFAULT", "r")
-		local overrideFile = LEX.trim(file:read("*a"))
-		file:close()
-		if LEX.fileExists(overrideFile) and not LEX.tableHasValue(reservedFilenames, overrideFile) then
-			locationsFile = overrideFile
-			--print("Loaded hidden packages file from DEFAULT: " .. locationsFile)
-		end
-	end
 
     GameSession.OnStart(function()
         -- Triggered once the load is complete and the player is in the game
@@ -137,7 +141,9 @@ registerForEvent('onInit', function()
         debugMsg('Game Session Started')
         isInGame = true
         isPaused = false
-        LOADED_PACKAGES = readHPLocations(userData.locFile)
+        if LEX.tableLen(LOADED_PACKAGES) == 0 then
+        	LOADED_PACKAGES = readHPLocations(userData.locFile)
+        end
 
         -- check if old userData.packages exist and if so clear it
         if userData.packages then
@@ -153,10 +159,10 @@ registerForEvent('onInit', function()
 	--end)
 
 	GameSession.OnLoad(function()
-		if overrideLocations or LEX.tableLen(LOADED_PACKAGES) == 0 then
-			userData.locFile = locationsFile
+		LOADED_PACKAGES = readHPLocations(userData.locFile)
+		if LEX.tableLen(LOADED_PACKAGES) == 0 then
+			userData.locFile = defaultLocationsFile
 			LOADED_PACKAGES = readHPLocations(userData.locFile)
-			overrideLocations = false
 		end
 	end)
 
@@ -187,7 +193,7 @@ end)
 
 registerForEvent('onDraw', function()
 
-	if showPerformanceWindow then
+	if MOD_SETTINGS.ShowPerformanceWindow then
 		ImGui.Begin("Hidden Packages - Performance")
 		ImGui.Text("loaded packages: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
 		ImGui.Text(performanceTextbox1)
@@ -212,44 +218,51 @@ registerForEvent('onDraw', function()
 				ImGui.Text("You got them all!")
 			end
 
-		else
-			ImGui.Text("Not in-game")
-			ImGui.Text("DEFAULT packages: " .. locationsFile)
-		end
-
-		ImGui.Separator()
-
-		newLocationsFile = ImGui.InputText("Locations file", newLocationsFile, 50)
-		if ImGui.Button("Load & Apply") then
-			if switchLocationsFile(newLocationsFile) then
-				statusMsg = "OK, loaded " .. newLocationsFile
-			else
-				statusMsg = "Error loading " .. newLocationsFile
-			end
-		end
-		ImGui.Text(statusMsg)
-		ImGui.Separator()
 		
-		if showRandomizer then
+
+			ImGui.Separator()
+
+			newLocationsFile = ImGui.InputText("Locations file", newLocationsFile, 50)
+			if ImGui.Button("Load & Apply") then
+				if switchLocationsFile(newLocationsFile) then
+					statusMsg = "OK, loaded " .. newLocationsFile
+				else
+					statusMsg = "Error loading " .. newLocationsFile
+				end
+			end
+			ImGui.Text(statusMsg)
+
+			if ImGui.Button("Creation Mode") then
+				showCreationWindow = true
+			end
+
+			ImGui.Separator()
+
+		else
+
+			ImGui.Text("Go in-game to do anything")
+			ImGui.Separator()
+
+		end
+		
+		if MOD_SETTINGS.RandomizerShown and isInGame then
 			ImGui.Text("Randomizer:")
-			randomizerAmount = ImGui.InputInt("Packages", randomizerAmount, 100)
+			MOD_SETTINGS.RandomizerAmount = ImGui.InputInt("Packages", MOD_SETTINGS.RandomizerAmount, 100)
 			if ImGui.Button("Generate") then
-				switchLocationsFile(generateRandomPackages(randomizerAmount))
+				switchLocationsFile(generateRandomPackages(MOD_SETTINGS.RandomizerAmount))
 				debugMsg("HP Randomizer done")
+				saveSettings()
 			end
 			ImGui.Separator()
 		end
 
-		if ImGui.Button("Creation Mode") then
-			showCreationWindow = true
-		end
 
-		if debugMode then
+
+		if MOD_SETTINGS.DebugMode then
 			ImGui.Text(" *** DEBUG MODE ACTIVE ***")
 			ImGui.Text("isInGame: " .. tostring(isInGame))
+			ImGui.Text("isPaused: " .. tostring(isPaused))
 			ImGui.Text("LOADED_PACKAGES: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
-			ImGui.Text("overrideLocations: " .. tostring(overrideLocations))
-			ImGui.Text("locationsFile: " .. locationsFile)
 			ImGui.Text("userData locFile: " .. userData.locFile)
 			ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
 			ImGui.Text("countCollected(): " .. tostring(countCollected()))
@@ -295,8 +308,8 @@ registerForEvent('onDraw', function()
 				ImGui.Separator()
 				ImGui.Text("Warning: One click is all you need.\nNo confirmations!")
 
-				if ImGui.Button("Load DEFAULT packages\n(" .. locationsFile .. ")") then
-					switchLocationsFile(locationsFile)
+				if ImGui.Button("Load default packages\n(" .. defaultLocationsFile .. ")") then
+					switchLocationsFile(defaultLocationsFile)
 				end
 
 				if ImGui.Button("Reload current packages\n(" .. userData.locFile .. ")") then
@@ -365,6 +378,7 @@ registerForEvent('onDraw', function()
 					HUDMessage("Location saved!")
 					Create_Message = "Location saved!"
 					Create_NewLocationComment = ""
+					MOD_SETTINGS.CreationModeFile = Create_NewCreationFile
 				else
 					Create_Message = "Error saving location :("
 				end
@@ -725,21 +739,19 @@ function switchLocationsFile(newFile)
 			userData.locFile = newFile
 			LOADED_PACKAGES = readHPLocations(newFile)
 			
-			overrideLocations = false
 			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (ingame)")
 			checkIfPlayerNearAnyPackage()
 		elseif isInGame and showCreationWindow then
 			-- creation mode = bascially same as not creation mode but dont change userData.locFile
 			reset()
 			LOADED_PACKAGES = readHPLocations(newFile)
-			overrideLocations=false
 
 			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (ingame creation mode)")
 			checkIfPlayerNearAnyPackage()
 		else
 			-- in main menu or something
-			locationsFile = newFile
-			overrideLocations = true
+			userData.locFile = newFile
+			LOADED_PACKAGES = readHPLocations(newFile)
 			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (not ingame)")
 		end
 
@@ -764,9 +776,9 @@ function checkIfPlayerNearAnyPackage()
 		debugMsg("check at " .. tostring(lastCheck))
 	end
 
-	local checkRange = nearPackageRange
-	if AUDIO_HINT_ENABLED and AUDIO_HINT_RANGE > checkRange then
-		checkRange = AUDIO_HINT_RANGE
+	local checkRange = MOD_SETTINGS.NearPackageRange
+	if MOD_SETTINGS.HintAudioEnabled and MOD_SETTINGS.HintAudioRange > checkRange then
+		checkRange = MOD_SETTINGS.HintAudioRange
 	end
 
 	local distanceToNearestPackage = nil
@@ -789,11 +801,11 @@ function checkIfPlayerNearAnyPackage()
 			end
 		end
 
-		if AUDIO_HINT_ENABLED and d ~= nil and d <= AUDIO_HINT_RANGE and (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) then
+		if MOD_SETTINGS.HintAudioEnabled and d ~= nil and d <= MOD_SETTINGS.HintAudioRange and (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) then
 			audioHint(k)
 		end
 
-		if d ~= nil and d <= nearPackageRange then -- player is in spawning range of package
+		if d ~= nil and d <= MOD_SETTINGS.NearPackageRange then -- player is in spawning range of package
 
 			if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) or showCreationWindow then
 				-- player has not collected package OR is in creation mode = should spawn the package
@@ -851,7 +863,7 @@ function checkIfPlayerNearAnyPackage()
 
 
 
-	if showPerformanceWindow then
+	if MOD_SETTINGS.ShowPerformanceWindow then
 		local loopTime = os.clock() - loopStarted
 		
 		table.insert(loopTimesAvg, loopTime)
@@ -868,7 +880,7 @@ end
 
 
 function debugMsg(msg)
-	if not debugMode then
+	if not MOD_SETTINGS.DebugMode then
 		return
 	end
 
@@ -938,4 +950,25 @@ function audioHint(i)
 	end
 	Game.GetAudioSystem():Play('ui_hacking_access_granted')
 	lastAudioHint = os.clock()
+end
+
+function saveSettings()
+	local file = io.open("SETTINGS.json", "w")
+	local j = json.encode(MOD_SETTINGS)
+	file:write(j)
+	file:close()
+end
+
+function loadSettings()
+	if not LEX.fileExists("SETTINGS.json") then
+		return false
+	end
+
+	local file = io.open("SETTINGS.json", "r")
+	local j = json.decode(file:read("*a"))
+	file:close()
+
+	MOD_SETTINGS = j
+
+	return true
 end
