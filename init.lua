@@ -9,10 +9,9 @@ local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
 local reservedFilenames = {"SETTINGS.json", "DEBUG", "RANDOMIZER", "PERFORMANCE", "DEFAULT", "init.lua", "db.sqlite3", "Hidden Packages.log"}
-local defaultLocationsFile = "packages1"
+local defaultLocationsFile = "packages1.map" -- should not have the Maps/
 
-local userData = {
-	locFile = defaultLocationsFile,
+local userData = { -- will persist
 	collectedPackageIDs = {}
 }
 
@@ -21,10 +20,11 @@ local MOD_SETTINGS = {
 	RandomizerShown = false,
 	RandomizerAmount = 100,
 	ShowPerformanceWindow = false,
-	CreationModeFile = "created",
+	CreationModeFile = "CREATED.map",
 	NearPackageRange = 100,
 	HintAudioEnabled = false,
-	HintAudioRange = 200
+	HintAudioRange = 200,
+	MapFile = defaultLocationsFile
 }
 
 local LOADED_PACKAGES = {}
@@ -33,7 +33,6 @@ local HUDMessage_Current = ""
 local HUDMessage_Last = 0
 
 local statusMsg = ""
-local showWindow = false
 local showCreationWindow = false
 local showScaryButtons = false
 
@@ -50,7 +49,7 @@ local activeMappins = {} -- object ids for map pins
 local activePackages = {}
 local isInGame = false
 local isPaused = true
-local newLocationsFile = userData.locFile -- used for text field in regular window
+local NEED_TO_REFRESH = false
 
 local lastCheck = 0
 local lastAudioHint = 0
@@ -70,7 +69,7 @@ end)
 registerHotkey("hp_toggle_create_window", "Toggle creation window", function()
 	showCreationWindow = not showCreationWindow
 	if showCreationWindow == false then
-		switchLocationsFile(userData.locFile) -- restore
+		switchLocationsFile(MOD_SETTINGS.MapFile) -- restore
 		checkIfPlayerNearAnyPackage()
 	end
 end)
@@ -94,9 +93,40 @@ registerForEvent('onInit', function()
 		print("Hidden Packages: no settings file found, using defaults")
 	end
 
+	LOADED_PACKAGES = readHPLocations(MOD_SETTINGS.MapFile)
+
 	-- generate NativeSettings
 	nativeSettings = GetMod("nativeSettings")
 	nativeSettings.addTab("/Hidden Packages", "Hidden Packages")
+
+	nativeSettings.addSubcategory("/Hidden Packages/Maps", "Maps")
+
+	-- scan Maps folder and generate table suitable for nativeSettings
+	local mapsFilenames = {}
+	local nsMaps = {}
+	local nsDefaultMap = 1
+	local nsCurrentMap = 1
+	for k,v in pairs(listFilesInFolder("Maps")) do
+		if LEX.stringEnds(v, ".map") then
+			--print(v, "should be added")
+			local i = LEX.tableLen(nsMaps) + 1
+			nsMaps[i] = getMapProperty(v, "displayname")
+			mapsFilenames[i] = v
+			if v == defaultLocationsFile then
+				nsDefaultMap = i
+			end
+			if v == MOD_SETTINGS.MapFile then
+				nsCurrentMap = i
+			end
+		end
+	end
+
+	nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "Which map to use (stored in the \'.../mods/Hidden Packages/Maps\' folder)", nsMaps, nsCurrentMap, nsDefaultMap, function(value)
+		--print("changed list to", nsMaps[value])
+		MOD_SETTINGS.MapFile = mapsFilenames[value]
+		saveSettings()
+		NEED_TO_REFRESH = true
+	end)
 
 	nativeSettings.addSubcategory("/Hidden Packages/AudioHints", "Audio Hints")
 
@@ -141,14 +171,20 @@ registerForEvent('onInit', function()
         debugMsg('Game Session Started')
         isInGame = true
         isPaused = false
-        if LEX.tableLen(LOADED_PACKAGES) == 0 then
-        	LOADED_PACKAGES = readHPLocations(userData.locFile)
+        
+        if NEED_TO_REFRESH then
+        	switchLocationsFile(MOD_SETTINGS.MapFile)
+        	NEED_TO_REFRESH = false
         end
 
-        -- check if old userData.packages exist and if so clear it
+        -- check if old legacy data exists and wipe it if so
         if userData.packages then
         	debugMsg("clearing legacy userData.packages")
         	userData.packages = nil
+        end
+        if userData.locFile then
+        	debugMsg("clearing legacy userData.locFile")
+        	userData.locFile = nil
         end
 
         Create_Message = "Lets go place some packages"
@@ -158,13 +194,9 @@ registerForEvent('onInit', function()
 	--GameSession.OnSave(function()
 	--end)
 
-	GameSession.OnLoad(function()
-		LOADED_PACKAGES = readHPLocations(userData.locFile)
-		if LEX.tableLen(LOADED_PACKAGES) == 0 then
-			userData.locFile = defaultLocationsFile
-			LOADED_PACKAGES = readHPLocations(userData.locFile)
-		end
-	end)
+	--GameSession.OnLoad(function()
+    --    LOADED_PACKAGES = readHPLocations(MOD_SETTINGS.MapFile)
+	--end)
 
     GameSession.OnEnd(function()
         -- Triggered once the current game session has ended
@@ -181,6 +213,11 @@ registerForEvent('onInit', function()
 
 	GameSession.OnResume(function()
 		isPaused = false
+
+        if NEED_TO_REFRESH then
+        	switchLocationsFile(MOD_SETTINGS.MapFile)
+        	NEED_TO_REFRESH = false
+        end
 	end)
 
     Observe('PlayerPuppet', 'OnAction', function(action) -- any player action
@@ -203,49 +240,13 @@ registerForEvent('onDraw', function()
 		ImGui.End()
 	end
 
-	if showWindow then
-		ImGui.Begin("Hidden Packages")
+	if MOD_SETTINGS.DebugMode then
+		ImGui.Begin("Hidden Packages - Debug")
 
-		if isInGame then
-			ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(LOADED_PACKAGES)))
 
-			if countCollected() < LEX.tableLen(LOADED_PACKAGES) then
-				if ImGui.Button("Mark nearest package")  then
-					markNearestPackage()
-				
-				end
-			else
-				ImGui.Text("You got them all!")
-			end
-
+		ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(LOADED_PACKAGES)))
 		
-
-			ImGui.Separator()
-
-			newLocationsFile = ImGui.InputText("Locations file", newLocationsFile, 50)
-			if ImGui.Button("Load & Apply") then
-				if switchLocationsFile(newLocationsFile) then
-					statusMsg = "OK, loaded " .. newLocationsFile
-				else
-					statusMsg = "Error loading " .. newLocationsFile
-				end
-			end
-			ImGui.Text(statusMsg)
-
-			if ImGui.Button("Creation Mode") then
-				showCreationWindow = true
-			end
-
-			ImGui.Separator()
-
-		else
-
-			ImGui.Text("Go in-game to do anything")
-			ImGui.Separator()
-
-		end
-		
-		if MOD_SETTINGS.RandomizerShown and isInGame then
+		if MOD_SETTINGS.RandomizerShown then
 			ImGui.Text("Randomizer:")
 			MOD_SETTINGS.RandomizerAmount = ImGui.InputInt("Packages", MOD_SETTINGS.RandomizerAmount, 100)
 			if ImGui.Button("Generate") then
@@ -259,21 +260,23 @@ registerForEvent('onDraw', function()
 
 
 		if MOD_SETTINGS.DebugMode then
-			ImGui.Text(" *** DEBUG MODE ACTIVE ***")
 			ImGui.Text("isInGame: " .. tostring(isInGame))
 			ImGui.Text("isPaused: " .. tostring(isPaused))
+			ImGui.Text("NEED_TO_REFRESH: " .. tostring(NEED_TO_REFRESH))
 			ImGui.Text("LOADED_PACKAGES: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
-			ImGui.Text("userData locFile: " .. userData.locFile)
+			ImGui.Text("Map filename: " .. tostring(MOD_SETTINGS.MapFile))
+			--ImGui.Text("Map identifier: " .. getMapProperty(MOD_SETTINGS.MapFile, "identifier"))
+			--ImGui.Text("Map display name: " .. getMapProperty(MOD_SETTINGS.MapFile, "displayname"))
 			ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
 			ImGui.Text("countCollected(): " .. tostring(countCollected()))
 			ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
 
-			if isInGame then
-				local NP = findNearestPackage(false) -- false to ignore if its collected or not
-				if NP then
-					ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToPackage(NP)) .. "M away")
-				end
-			end
+			-- if isInGame then
+			-- 	local NP = findNearestPackage(false) -- false to ignore if its collected or not
+			-- 	if NP then
+			-- 		ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToPackage(NP)) .. "M away")
+			-- 	end
+			-- end
 
 			local c = 0 
 			for k,v in pairs(activePackages) do
@@ -291,51 +294,50 @@ registerForEvent('onDraw', function()
 			end
 			ImGui.Text("activeMappins: " .. tostring(c))
 
-			if ImGui.Button("reset()") then
-				reset()
-			end
-			ImGui.Separator()
+			-- if ImGui.Button("reset()") then
+			-- 	reset()
+			-- end
 		end
 
-		if isInGame then
+		-- if isInGame then
 
-			if ImGui.Button("Show/hide Scary Buttons") then
-				showScaryButtons = not showScaryButtons
-			end
+		-- 	if ImGui.Button("Show/hide Scary Buttons") then
+		-- 		showScaryButtons = not showScaryButtons
+		-- 	end
 
-			if showScaryButtons then
+		-- 	if showScaryButtons then
 
-				ImGui.Separator()
-				ImGui.Text("Warning: One click is all you need.\nNo confirmations!")
+		-- 		ImGui.Separator()
+		-- 		ImGui.Text("Warning: One click is all you need.\nNo confirmations!")
 
-				if ImGui.Button("Load default packages\n(" .. defaultLocationsFile .. ")") then
-					switchLocationsFile(defaultLocationsFile)
-				end
+		-- 		if ImGui.Button("Load default packages\n(" .. defaultLocationsFile .. ")") then
+		-- 			switchLocationsFile(defaultLocationsFile)
+		-- 		end
 
-				if ImGui.Button("Reload current packages\n(" .. userData.locFile .. ")") then
-					LOADED_PACKAGES = readHPLocations(userData.locFile)
-				end
+		-- 		--if ImGui.Button("Reload current packages\n(" .. userData.locFile .. ")") then
+		-- 		--	LOADED_PACKAGES = readHPLocations(userData.locFile)
+		-- 		--end
 
-				if countCollected() > 0 then
-					if ImGui.Button("Reset progress\n(" .. userData.locFile .. ")") then
-						reset()
-						clearProgress(userData.locFile)
-						checkIfPlayerNearAnyPackage()
-					end
-					ImGui.SameLine()
-				end
+		-- 		--if countCollected() > 0 then
+		-- 		--	if ImGui.Button("Reset progress\n(" .. userData.locFile .. ")") then
+		-- 		--		reset()
+		-- 		--		clearProgress(userData.locFile)
+		-- 		--		checkIfPlayerNearAnyPackage()
+		-- 		--	end
+		-- 		--	ImGui.SameLine()
+		-- 		--end
 
-				if LEX.tableLen(userData.collectedPackageIDs) > 0 then
-					if ImGui.Button("Reset progress\n(all location files)") then
-						reset()
-						userData.collectedPackageIDs = {}
-						checkIfPlayerNearAnyPackage()
-					end
-				end
+		-- 		if LEX.tableLen(userData.collectedPackageIDs) > 0 then
+		-- 			if ImGui.Button("Reset progress\n(all location files)") then
+		-- 				reset()
+		-- 				userData.collectedPackageIDs = {}
+		-- 				checkIfPlayerNearAnyPackage()
+		-- 			end
+		-- 		end
 
-			end
+		-- 	end
 
-		end
+		-- end
 
 		ImGui.End()
 	end
@@ -410,7 +412,7 @@ registerForEvent('onDraw', function()
 		ImGui.Text("Note: Packages aren\'t collected when you have this window open")
 		if ImGui.Button("Close") then
 			showCreationWindow = false
-			switchLocationsFile(userData.locFile) -- restore
+			switchLocationsFile(MOD_SETTINGS.MapFile) -- restore
 			checkIfPlayerNearAnyPackage() -- cleans up any leftover packages
 		end
 
@@ -522,6 +524,9 @@ function destroyAllPackageObjects()
 end
 
 function readHPLocations(filename)
+	local mapIdentifier = getMapProperty(filename, "identifier")
+	filename = "Maps/" .. filename -- ugly hack again
+	
 	if not LEX.fileExists(filename) or LEX.tableHasValue(reservedFilenames, filename) then
 		debugMsg("readHPLocations() not a valid file")
 		return false
@@ -531,8 +536,10 @@ function readHPLocations(filename)
 
 	local lines = {}
 	for line in io.lines(filename) do
-		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then 
-			lines[#lines + 1] = line
+		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
+			if not LEX.stringStarts(line, "IDENTIFIER:") and not LEX.stringStarts(line,"DISPLAY_NAME:") then
+				lines[#lines + 1] = line
+			end
 		end
 	end
 
@@ -545,7 +552,7 @@ function readHPLocations(filename)
 
 		local hp = {}
 		-- id is based on coordinates so that the order of the lines in the packages file is not important and can be moved around later on
-		hp["identifier"] = filename .. ": x=" .. tostring(vals[1]) .. " y=" .. tostring(vals[2]) .. " z=" .. tostring(vals[3]) .. " w=" .. tostring(vals[4])
+		hp["identifier"] = mapIdentifier .. ": x=" .. tostring(vals[1]) .. " y=" .. tostring(vals[2]) .. " z=" .. tostring(vals[3]) .. " w=" .. tostring(vals[4])
 		hp["x"] = tonumber(vals[1])
 		hp["y"] = tonumber(vals[2])
 		hp["z"] = tonumber(vals[3])
@@ -730,19 +737,21 @@ function markNearestPackage()
 end
 
 function switchLocationsFile(newFile)
-	if LEX.fileExists(newFile) and not LEX.tableHasValue(reservedFilenames, newFile) then
+	local path = "Maps/" .. newFile
+
+	if LEX.fileExists(path) and not LEX.tableHasValue(reservedFilenames, newFile) then
 		debugMsg("switchLocationsFile(" .. newFile .. ")")
 
 		if isInGame and not showCreationWindow then
 			-- regular switch
 			reset()
-			userData.locFile = newFile
+			MOD_SETTINGS.MapFile = newFile
 			LOADED_PACKAGES = readHPLocations(newFile)
 			
 			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (ingame)")
 			checkIfPlayerNearAnyPackage()
 		elseif isInGame and showCreationWindow then
-			-- creation mode = bascially same as not creation mode but dont change userData.locFile
+			-- creation mode = bascially same as not creation mode but dont change MOD_SETTINGS.MapFile
 			reset()
 			LOADED_PACKAGES = readHPLocations(newFile)
 
@@ -750,7 +759,7 @@ function switchLocationsFile(newFile)
 			checkIfPlayerNearAnyPackage()
 		else
 			-- in main menu or something
-			userData.locFile = newFile
+			MOD_SETTINGS.MapFile = newFile
 			LOADED_PACKAGES = readHPLocations(newFile)
 			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (not ingame)")
 		end
@@ -971,4 +980,46 @@ function loadSettings()
 	MOD_SETTINGS = j
 
 	return true
+end
+
+function listFilesInFolder(folder)
+	local files = {}
+	for k,v in pairs(dir(folder)) do
+		for a,b in pairs(v) do
+			if a == "name" then
+				table.insert(files, b)
+			end
+		end
+	end
+	return files
+end
+
+function getMapProperty(mapfile, what)
+	local path = "Maps/" .. mapfile
+
+	--print(LEX.fileExists(path))
+	
+	-- TODO optimize
+
+	if what == "identifier" then
+		local lines = {}
+		for line in io.lines(path) do
+			if LEX.stringStarts(line, "IDENTIFIER:") then
+				 return string.match(line, ":(.*)") -- https://stackoverflow.com/a/50398252
+			end
+		end
+		return mapfile
+
+	elseif what == "displayname" then
+		local lines = {}
+		for line in io.lines(path) do
+			if LEX.stringStarts(line, "DISPLAY_NAME:") then
+				 return string.match(line, ":(.*)") -- https://stackoverflow.com/a/50398252
+			end
+		end
+		return mapfile
+	end
+
+	return false
+
 end

@@ -1,5 +1,20 @@
-# X Y Z W (space separated)
+
 # Blank lines or lines starting with # are ignored and can be used for comments etc.
+
+# IDENTIFIER should be something uniquely identifiying this map, it's used for keeping track of what packages have been collected for instance.
+# So if you just add more points to a map, you should keep it. If you remove them all and want to make a new one, you should switch it.
+# If you want a user to have to collect all packages all over again you should switch it too.
+
+IDENTIFIER:packages1
+
+# DISPLAY_NAME is what will be shown in the settings UI. It can be pretty.
+
+DISPLAY_NAME:Default Hidden Packages
+
+# Now for the coordinates:
+
+# X Y Z W (space separated)
+
 # You can also put comments after the coordinate itself, just make sure to put a space after the final W coordinate
 # W seems to always be 1 but better include it just to be safe...
 # 2-3 decimals should be enough for XYZ
@@ -7,55 +22,29 @@
 # The prop used for the package will get a little boost in the Z axis to appear higher above the ground so you dont need to worry about that.
 
 -1095.84 1162.39 1.24 1 
-
 -1451.70 1128.32 23.64 1
-
 -1558.74 689.87 9.71 1
-
 -1382.21 25.88 8.17 1
-
 -235.66 -2586.86 39.57 1
-
 2580.47 -155.75 81.85 1
-
 2955.49 -457.59 109.29 1
-
 -1445.60 1260.99 123.08 1
-
 -1432.29 -5071.18 83.04 1
-
 436.54 -1436.34 15 1
-
 410.91 -1675.36 9.32 1
-
 -1853.74 -1955.45 48.69 1
-
 -2112.08 2897.51 7.11 1
-
 -1695.45 3403.76 7.16 1
-
 -2623.58 3640.25 12.65 1
-
 58.60 87.49 20.76 1
-
 -536.53 -735.87 12.63 1
-
 -2061.44 -1128.93 9.08 1
-
 -65.80 -4011.17 35.56 1
-
 1490.49 -1381.68 57.25 1
-
 -2862.93 -3864.72 70.81 1
-
 1637.92 -802.80 49.81 1
-
 2847.47 -1424.39 64.65 1
-
 3598.28 -1541.74 118.88 1
-
-# started using the built-in creation menu here
-
 297.38 -2094.91 17.09 1 // Blue houses place
 -1858.02 -4975.23 83.61 1 // fans out in the desert
 -1268.85 1532.14 22.66 1 // some dumpsters

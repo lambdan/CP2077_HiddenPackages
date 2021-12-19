@@ -38,6 +38,10 @@ function LEX.stringStarts(String,Start) -- https://stackoverflow.com/a/22831842
    return string.sub(String,1,string.len(Start))==Start
 end
 
+function LEX.stringEnds(s, e) -- http://lua-users.org/wiki/StringRecipes
+    return (e == "" or s:sub(-#e) == e)
+end
+
 function LEX.copyTable(t) -- https://stackoverflow.com/a/39185792
     local new = {}
     for k,v in ipairs(t) do
