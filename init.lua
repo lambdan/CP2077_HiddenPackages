@@ -14,10 +14,11 @@ local locationsFile = "packages1" -- default/fallback packages file, will be ove
 local overrideLocations = false
 
 local userData = {
-	locFile = "",
-	packages = {},
+	locFile = "packages1",
 	collectedPackageIDs = {}
 }
+
+local LOADED_PACKAGES = {}
 
 local debugMode = false
 local showRandomizer = false
@@ -65,7 +66,7 @@ end)
 registerHotkey("hp_toggle_create_window", "Toggle creation window", function()
 	showCreationWindow = not showCreationWindow
 	if showCreationWindow == false then
-		-- removes leftover packages
+		switchLocationsFile(userData.locFile) -- restore
 		checkIfPlayerNearAnyPackage()
 	end
 end)
@@ -103,9 +104,11 @@ registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
 end)
 
 registerForEvent('onInit', function()
+
 	if LEX.fileExists("DEBUG") then
 		debugMsg("DEBUG file found")
 		debugMode = true
+		showPerformanceWindow = true
 	end
 
 	GameSession.StoreInDir('Sessions')
@@ -128,6 +131,14 @@ registerForEvent('onInit', function()
         -- (after the loading screen for "Load Game" or "New Game")
         debugMsg('Game Session Started')
         isInGame = true
+        LOADED_PACKAGES = readHPLocations(userData.locFile)
+
+        -- check if old userData.packages exist and if so clear it
+        if userData.packages then
+        	debugMsg("clearing legacy userData.packages")
+        	userData.packages = nil
+        end
+
         Create_Message = "Lets go place some packages"
         checkIfPlayerNearAnyPackage() -- otherwise if you made a save near a package and just stand still it wont spawn until you move
     end)
@@ -136,12 +147,11 @@ registerForEvent('onInit', function()
 	--end)
 
 	GameSession.OnLoad(function()
-		if overrideLocations or LEX.tableLen(userData.packages) == 0 then
+		if overrideLocations or LEX.tableLen(LOADED_PACKAGES) == 0 then
 			userData.locFile = locationsFile
-			userData.packages = readHPLocations(locationsFile)
-			overrideLocations = false -- only load these new packages once. if user loads another save file where it already had packages loaded, use that.
+			LOADED_PACKAGES = readHPLocations(userData.locFile)
+			overrideLocations = false
 		end
-
 	end)
 
     GameSession.OnEnd(function()
@@ -163,7 +173,7 @@ registerForEvent('onDraw', function()
 
 	if showPerformanceWindow then
 		ImGui.Begin("Hidden Packages - Performance")
-		ImGui.Text("packages: " .. tostring(LEX.tableLen(userData.packages)))
+		ImGui.Text("loaded packages: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
 		ImGui.Text(performanceTextbox1)
 		ImGui.Text(performanceTextbox2)
 		ImGui.Text(performanceTextbox3)
@@ -175,11 +185,9 @@ registerForEvent('onDraw', function()
 		ImGui.Begin("Hidden Packages")
 
 		if isInGame then
+			ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(LOADED_PACKAGES)))
 
-			ImGui.Text("Using locations from: " .. userData.locFile)
-			ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(userData.packages)))
-
-			if countCollected() < LEX.tableLen(userData.packages) then
+			if countCollected() < LEX.tableLen(LOADED_PACKAGES) then
 				if ImGui.Button("Mark nearest package")  then
 					markNearestPackage()
 				
@@ -195,7 +203,7 @@ registerForEvent('onDraw', function()
 
 		ImGui.Separator()
 
-		newLocationsFile = ImGui.InputText("", newLocationsFile, 50)
+		newLocationsFile = ImGui.InputText("Locations file", newLocationsFile, 50)
 		if ImGui.Button("Load & Apply") then
 			if switchLocationsFile(newLocationsFile) then
 				statusMsg = "OK, loaded " .. newLocationsFile
@@ -210,9 +218,6 @@ registerForEvent('onDraw', function()
 			ImGui.Text("Randomizer:")
 			randomizerAmount = ImGui.InputInt("Packages", randomizerAmount, 100)
 			if ImGui.Button("Generate") then
-				if randomizerAmount > 25000 then
-					randomizerAmount = 25000
-				end
 				switchLocationsFile(generateRandomPackages(randomizerAmount))
 				debugMsg("HP Randomizer done")
 			end
@@ -226,10 +231,10 @@ registerForEvent('onDraw', function()
 		if debugMode then
 			ImGui.Text(" *** DEBUG MODE ACTIVE ***")
 			ImGui.Text("isInGame: " .. tostring(isInGame))
+			ImGui.Text("LOADED_PACKAGES: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
 			ImGui.Text("overrideLocations: " .. tostring(overrideLocations))
 			ImGui.Text("locationsFile: " .. locationsFile)
 			ImGui.Text("userData locFile: " .. userData.locFile)
-			ImGui.Text("userData packages: " .. tostring(LEX.tableLen(userData.packages)))
 			ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
 			ImGui.Text("countCollected(): " .. tostring(countCollected()))
 			ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
@@ -279,7 +284,7 @@ registerForEvent('onDraw', function()
 				end
 
 				if ImGui.Button("Reload current packages\n(" .. userData.locFile .. ")") then
-					userData.packages = readHPLocations(userData.locFile)
+					LOADED_PACKAGES = readHPLocations(userData.locFile)
 				end
 
 				if countCollected() > 0 then
@@ -327,8 +332,7 @@ registerForEvent('onDraw', function()
 			ImGui.Text("\tW: " .. tostring(position["w"]))
 
 			ImGui.Separator()
-			ImGui.Text("Currently loaded: " .. userData.locFile)
-			ImGui.Text("(" .. tostring(LEX.tableLen(userData.packages)) .. " packages)")
+			ImGui.Text("(" .. tostring(LEX.tableLen(LOADED_PACKAGES)) .. " packages)")
 
 			local NP = findNearestPackage(false) -- false to ignore if its collected or not
 			if NP then
@@ -353,13 +357,13 @@ registerForEvent('onDraw', function()
 
 			if ImGui.Button("Apply & Test") then
 				switchLocationsFile(Create_NewCreationFile)
-				Create_Message = tostring(LEX.tableLen(userData.packages)) .. " packages applied & loaded"
+				Create_Message = tostring(LEX.tableLen(LOADED_PACKAGES)) .. " packages applied & loaded"
 			end
 			ImGui.Separator()
 
 			if ImGui.Button("Mark ALL packages on map") then
 				removeAllMappins()
-				for k,v in pairs(userData.packages) do
+				for k,v in pairs(LOADED_PACKAGES) do
 					markPackage(k)
 				end
 			end
@@ -376,6 +380,7 @@ registerForEvent('onDraw', function()
 		ImGui.Text("Note: Packages aren\'t collected when you have this window open")
 		if ImGui.Button("Close") then
 			showCreationWindow = false
+			switchLocationsFile(userData.locFile) -- restore
 			checkIfPlayerNearAnyPackage() -- cleans up any leftover packages
 		end
 
@@ -390,7 +395,7 @@ function spawnPackage(i)
 		return false
 	end
 
-	local pkg = userData.packages[i]
+	local pkg = LOADED_PACKAGES[i]
 	local entity = spawnObjectAtPos(pkg["x"], pkg["y"], pkg["z"]+propZboost, pkg["w"])
 	if entity then
 		activePackages[i] = entity
@@ -440,7 +445,7 @@ end
 function collectHP(packageIndex)
 	debugMsg("collectHP(" .. tostring(packageIndex) .. ")")
 
-	local pkg = userData.packages[packageIndex]
+	local pkg = LOADED_PACKAGES[packageIndex]
 
 	if not LEX.tableHasValue(userData.collectedPackageIDs, pkg["identifier"]) then
 		table.insert(userData.collectedPackageIDs, pkg["identifier"])
@@ -451,13 +456,13 @@ function collectHP(packageIndex)
 	unmarkPackage(packageIndex)
 	despawnPackage(packageIndex)
 
-    if countCollected() == LEX.tableLen(userData.packages) then
+    if (countCollected() == LEX.tableLen(LOADED_PACKAGES)) and (LEX.tableLen(LOADED_PACKAGES) > 0) then
     	-- got em all
     	debugMsg("Got all packages")
     	GameHUD.ShowWarning("All Hidden Packages collected!")
     	rewardAllPackages()
     else
-    	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LEX.tableLen(userData.packages))
+    	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LEX.tableLen(LOADED_PACKAGES))
     	GameHUD.ShowWarning(msg)
     end
 
@@ -475,7 +480,7 @@ function reset()
 end
 
 function destroyAllPackageObjects()
-	for k,v in pairs(userData.packages) do
+	for k,v in pairs(LOADED_PACKAGES) do
 		if activePackages[k] then
 			despawnPackage(k)
 		end
@@ -487,6 +492,8 @@ function readHPLocations(filename)
 	if not LEX.fileExists(filename) or LEX.tableHasValue(reservedFilenames, filename) then
 		debugMsg("readHPLocations() not a valid file")
 		return false
+	else
+		debugMsg("readHPLocations(): " .. filename)
 	end
 
 	local lines = {}
@@ -536,13 +543,10 @@ function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/
 end
 
 function generateRandomPackages(n)
-	if n > 25000 then
-		n = 25000
-	end
 	debugMsg("generating " .. n .. " random packages...")
 
 	local filename = tostring(n) .. " random packages (" .. os.date("%Y%m%d-%H%M%S") .. ")"
-	userData.packages = {}
+	LOADED_PACKAGES = {}
 	local i = 1
 	local content = ""
 	while (i <= n) do
@@ -613,7 +617,7 @@ function markPackage(i) -- i = package index
 		return false
 	end
 
-	local pkg = userData.packages[i]
+	local pkg = LOADED_PACKAGES[i]
 	local mappin_id = placeMapPin(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
 	if mappin_id then
 		activeMappins[i] = mappin_id
@@ -641,7 +645,7 @@ function unmarkPackage(i)
 end	
 
 function removeAllMappins()
-	for k,v in pairs(userData.packages) do
+	for k,v in pairs(LOADED_PACKAGES) do
 		if activeMappins[k] then
 			unmarkPackage(k)
 		end
@@ -654,7 +658,7 @@ function findNearestPackage(ignoreFound)
 	local nearestPackage = false
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
-	for k,v in pairs(userData.packages) do
+	for k,v in pairs(LOADED_PACKAGES) do
 		if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) or (ignoreFound == false) then
 			
 			local distance = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
@@ -696,15 +700,25 @@ function switchLocationsFile(newFile)
 	if LEX.fileExists(newFile) and not LEX.tableHasValue(reservedFilenames, newFile) then
 		debugMsg("switchLocationsFile(" .. newFile .. ")")
 
-		if isInGame then 
+		if isInGame and not showCreationWindow then
+			-- regular switch
 			reset()
 			userData.locFile = newFile
-			userData.packages = readHPLocations(newFile)
+			LOADED_PACKAGES = readHPLocations(newFile)
 			
 			overrideLocations = false
 			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (ingame)")
 			checkIfPlayerNearAnyPackage()
+		elseif isInGame and showCreationWindow then
+			-- creation mode = bascially same as not creation mode but dont change userData.locFile
+			reset()
+			LOADED_PACKAGES = readHPLocations(newFile)
+			overrideLocations=false
+
+			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (ingame creation mode)")
+			checkIfPlayerNearAnyPackage()
 		else
+			-- in main menu or something
 			locationsFile = newFile
 			overrideLocations = true
 			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (not ingame)")
@@ -733,7 +747,7 @@ function checkIfPlayerNearAnyPackage()
 
 	local distanceToNearestPackage = nil
 	local playerPos = Game.GetPlayer():GetWorldPosition()
-	for k,v in pairs(userData.packages) do
+	for k,v in pairs(LOADED_PACKAGES) do
 		local d = nil
 
 		if math.abs(playerPos["x"] - v["x"]) <= nearPackageRange then
@@ -867,7 +881,7 @@ end
 function countCollected()
 	-- cant just check length of collectedPackageIDs as it may include packages from other location files
 	local c = 0
-	for k,v in pairs(userData.packages) do
+	for k,v in pairs(LOADED_PACKAGES) do
 		if LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) then
 			c = c + 1
 		end
@@ -882,7 +896,7 @@ function rewardAllPackages()
 end
 
 function distanceToPackage(i)
-	local pkg = userData.packages[i]
+	local pkg = LOADED_PACKAGES[i]
 	return distanceToCoordinates(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
 end
 
