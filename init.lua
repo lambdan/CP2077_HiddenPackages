@@ -203,6 +203,9 @@ registerForEvent('onDraw', function()
 			ImGui.Text("Randomizer:")
 			randomizerAmount = ImGui.InputInt("Packages", randomizerAmount, 100)
 			if ImGui.Button("Generate") then
+				if randomizerAmount > 25000 then
+					randomizerAmount = 25000
+				end
 				switchLocationsFile(generateRandomPackages(randomizerAmount))
 				debugMsg("HP Randomizer done")
 			end
@@ -526,6 +529,9 @@ function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/
 end
 
 function generateRandomPackages(n)
+	if n > 25000 then
+		n = 25000
+	end
 	debugMsg("generating " .. n .. " random packages...")
 
 	local filename = tostring(n) .. " random packages (" .. os.date("%Y%m%d-%H%M%S") .. ")"
