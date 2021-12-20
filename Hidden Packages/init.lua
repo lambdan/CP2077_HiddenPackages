@@ -102,8 +102,8 @@ registerForEvent('onInit', function()
 	nativeSettings.addSubcategory("/Hidden Packages/Maps", "Maps")
 
 	-- scan Maps folder and generate table suitable for nativeSettings
-	local mapsFilenames = {}
-	local nsMaps = {}
+	local mapsFilenames = {[1] = "NONE"}
+	local nsMaps = {[1] = "None (Mod disabled)"}
 	local nsDefaultMap = 1
 	local nsCurrentMap = 1
 	for k,v in pairs(listFilesInFolder("Maps")) do
@@ -121,7 +121,7 @@ registerForEvent('onInit', function()
 		end
 	end
 
-	nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "Which map to use (stored in the \'.../mods/Hidden Packages/Maps\' folder)", nsMaps, nsCurrentMap, nsDefaultMap, function(value)
+	nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "Which map to use (stored in the \'.../mods/Hidden Packages/Maps\' folder). When set to None the mod is practically disabled.", nsMaps, nsCurrentMap, nsDefaultMap, function(value)
 		--print("changed list to", nsMaps[value])
 		MOD_SETTINGS.MapFile = mapsFilenames[value]
 		saveSettings()
@@ -524,6 +524,10 @@ function destroyAllPackageObjects()
 end
 
 function readHPLocations(filename)
+	if filename == "NONE" then
+		return {}
+	end
+
 	local mapIdentifier = getMapProperty(filename, "identifier")
 	filename = "Maps/" .. filename -- ugly hack again
 	
@@ -737,6 +741,13 @@ function markNearestPackage()
 end
 
 function switchLocationsFile(newFile)
+	if newFile == "NONE" then
+		reset()
+		LOADED_PACKAGES = {}
+		debugMsg("switchLocationsFile(" .. newFile .. ") = mod disabled")
+		return true
+	end
+
 	local path = "Maps/" .. newFile
 
 	if LEX.fileExists(path) and not LEX.tableHasValue(reservedFilenames, newFile) then
@@ -773,6 +784,10 @@ end
 
 function checkIfPlayerNearAnyPackage()
 	local loopStarted = os.clock()
+
+	if MOD_SETTINGS.MapFile == "NONE" then -- mod disabled more or less
+		return
+	end
 
 	if isInGame == false then
 		return
