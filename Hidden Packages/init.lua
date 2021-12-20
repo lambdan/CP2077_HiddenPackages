@@ -8,7 +8,6 @@ local GameSession = require("Modules/GameSession.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
-local reservedFilenames = {"SETTINGS.json", "DEBUG", "PERFORMANCE", "DEFAULT", "init.lua", "db.sqlite3", "Hidden Packages.log"}
 local defaultLocationsFile = "packages1.map" -- should not have the Maps/
 
 local userData = { -- will persist
@@ -49,9 +48,9 @@ local checkThrottle = 1
 
 -- performance stuff
 local loopTimesAvg = {}
-local performanceTextbox1 = "text 1"
-local performanceTextbox2 = "text 2"
-local performanceTextbox3 = "text 3"
+local performanceTextbox1 = "speed/s"
+local performanceTextbox2 = "ms"
+local performanceTextbox3 = "avg"
 
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
@@ -71,13 +70,8 @@ registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
 end)
 
 registerForEvent('onInit', function()
-	if loadSettings() then
-		print("Hidden Packages: loaded settings")
-	else
-		print("Hidden Packages: no settings file found, using defaults")
-	end
-
-	LOADED_PACKAGES = readHPLocations(MOD_SETTINGS.MapFile)
+	loadSettings()
+	NEED_TO_REFRESH = true
 
 	-- generate NativeSettings
 	nativeSettings = GetMod("nativeSettings")
@@ -86,7 +80,7 @@ registerForEvent('onInit', function()
 	nativeSettings.addSubcategory("/Hidden Packages/Maps", "Maps")
 
 	-- scan Maps folder and generate table suitable for nativeSettings
-	local mapsFilenames = {[1] = "NONE"}
+	local mapsFilenames = {[1] = false}
 	local nsMaps = {[1] = "None (Mod disabled)"}
 	local nsDefaultMap = 1
 	local nsCurrentMap = 1
@@ -94,7 +88,7 @@ registerForEvent('onInit', function()
 		if LEX.stringEnds(v, ".map") then
 			--print(v, "should be added")
 			local i = LEX.tableLen(nsMaps) + 1
-			nsMaps[i] = getMapProperty(v, "displayname")
+			nsMaps[i] = getMapProperty("Maps/" .. v, "displayname")
 			mapsFilenames[i] = v
 			if v == defaultLocationsFile then
 				nsDefaultMap = i
@@ -221,52 +215,40 @@ registerForEvent('onDraw', function()
 
 	if MOD_SETTINGS.DebugMode then
 		ImGui.Begin("Hidden Packages - Debug")
-
-
 		ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(LOADED_PACKAGES)))
-		
+		ImGui.Text("isInGame: " .. tostring(isInGame))
+		ImGui.Text("isPaused: " .. tostring(isPaused))
+		ImGui.Text("NEED_TO_REFRESH: " .. tostring(NEED_TO_REFRESH))
+		ImGui.Text("LOADED_PACKAGES: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
+		ImGui.Text("MOD_SETTINGS.MapFile: " .. tostring(MOD_SETTINGS.MapFile))
+		--ImGui.Text("Map identifier: " .. getMapProperty(MOD_SETTINGS.MapFile, "identifier"))
+		--ImGui.Text("Map display name: " .. getMapProperty(MOD_SETTINGS.MapFile, "displayname"))
+		ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
+		ImGui.Text("countCollected(): " .. tostring(countCollected()))
+		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
 
+		-- if isInGame then
+		-- 	local NP = findNearestPackage(false) -- false to ignore if its collected or not
+		-- 	if NP then
+		-- 		ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToPackage(NP)) .. "M away")
+		-- 	end
+		-- end
 
-
-		if MOD_SETTINGS.DebugMode then
-			ImGui.Text("isInGame: " .. tostring(isInGame))
-			ImGui.Text("isPaused: " .. tostring(isPaused))
-			ImGui.Text("NEED_TO_REFRESH: " .. tostring(NEED_TO_REFRESH))
-			ImGui.Text("LOADED_PACKAGES: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
-			ImGui.Text("Map filename: " .. tostring(MOD_SETTINGS.MapFile))
-			--ImGui.Text("Map identifier: " .. getMapProperty(MOD_SETTINGS.MapFile, "identifier"))
-			--ImGui.Text("Map display name: " .. getMapProperty(MOD_SETTINGS.MapFile, "displayname"))
-			ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
-			ImGui.Text("countCollected(): " .. tostring(countCollected()))
-			ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
-
-			-- if isInGame then
-			-- 	local NP = findNearestPackage(false) -- false to ignore if its collected or not
-			-- 	if NP then
-			-- 		ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToPackage(NP)) .. "M away")
-			-- 	end
-			-- end
-
-			local c = 0 
-			for k,v in pairs(activePackages) do
-				if v then
-					c = c + 1
-				end
+		local c = 0 
+		for k,v in pairs(activePackages) do
+			if v then
+				c = c + 1
 			end
-			ImGui.Text("activePackages: " .. tostring(c))
-
-			local c = 0 
-			for k,v in pairs(activeMappins) do
-				if v then
-					c = c + 1
-				end
-			end
-			ImGui.Text("activeMappins: " .. tostring(c))
-
-			-- if ImGui.Button("reset()") then
-			-- 	reset()
-			-- end
 		end
+		ImGui.Text("activePackages: " .. tostring(c))
+
+		local c = 0 
+		for k,v in pairs(activeMappins) do
+			if v then
+				c = c + 1
+			end
+		end
+		ImGui.Text("activeMappins: " .. tostring(c))
 
 		-- if isInGame then
 
@@ -315,7 +297,6 @@ end)
 
 function spawnPackage(i)
 	if activePackages[i] then
-		debugMsg("spawnPackage(" .. tostring(i) .. ") = package already spawned")
 		return false
 	end
 
@@ -323,23 +304,15 @@ function spawnPackage(i)
 	local entity = spawnObjectAtPos(pkg["x"], pkg["y"], pkg["z"]+PACKAGE_PROP_Z_BOOST, pkg["w"], PACKAGE_PROP)
 	if entity then
 		activePackages[i] = entity
-		debugMsg("spawnPackage(" .. tostring(i) .. ") = OK")
 		return entity
-	else
-		debugMsg("spawnPackage(" .. tostring(i) .. ") = error with spawn")
-		return false
 	end
+	return false
 end
 
 function spawnObjectAtPos(x,y,z,w, prop)
-	if not isInGame then
-		return
-	end
-
     local transform = Game.GetPlayer():GetWorldTransform()
     local pos = ToVector4{x=x, y=y, z=z, w=w}
     transform:SetPosition(pos)
-
     return WorldFunctionalTests.SpawnEntity(prop, transform, '') -- returns ID
 end
 
@@ -347,14 +320,9 @@ function despawnPackage(i) -- i = package index
 	if activePackages[i] then
 		if destroyObject(activePackages[i]) then
 			activePackages[i] = nil
-			debugMsg("despawnPackage(" .. tostring(i) .. ") = OK")
 			return true
-		else
-			debugMsg("despawnPackage(" .. tostring(i) .. ") = ERROR destroyObject()")
-			return false
 		end
 	end
-	debugMsg("despawnPackage(" .. tostring(i) .. ") = package not active")
     return false
 end
 
@@ -367,14 +335,12 @@ function destroyObject(e)
 end
 
 function collectHP(packageIndex)
-	debugMsg("collectHP(" .. tostring(packageIndex) .. ")")
-
 	local pkg = LOADED_PACKAGES[packageIndex]
 
 	if not LEX.tableHasValue(userData.collectedPackageIDs, pkg["identifier"]) then
 		table.insert(userData.collectedPackageIDs, pkg["identifier"])
 	else
-		debugMsg("HMM, this package seems to already be collected???")
+		debugMsg("hmmmmm, this package seems to already be collected???")
 	end
 
 	unmarkPackage(packageIndex)
@@ -390,10 +356,7 @@ function collectHP(packageIndex)
     	GameHUD.ShowWarning(msg)
     	--Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
     	--HUDMessage(msg)
-
     end
-
-   	debugMsg("collectHP(" .. tostring(packageIndex) .. ") OK")
 end
 
 function reset()
@@ -412,26 +375,13 @@ function destroyAllPackageObjects()
 			despawnPackage(k)
 		end
 	end
-	debugMsg("destroyAll() OK")
 end
 
-function readHPLocations(filename)
-	if filename == "NONE" then
-		return {}
-	end
-
-	local mapIdentifier = getMapProperty(filename, "identifier")
-	filename = "Maps/" .. filename -- ugly hack again
-	
-	if not LEX.fileExists(filename) or LEX.tableHasValue(reservedFilenames, filename) then
-		debugMsg("readHPLocations() not a valid file")
-		return false
-	else
-		debugMsg("readHPLocations(): " .. filename)
-	end
+function readHPLocations(path)
+	local mapIdentifier = getMapProperty(path, "identifier")
 
 	local lines = {}
-	for line in io.lines(filename) do
+	for line in io.lines(path) do
 		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
 			if not LEX.stringStarts(line, "IDENTIFIER:") and not LEX.stringStarts(line,"DISPLAY_NAME:") then
 				lines[#lines + 1] = line
@@ -478,39 +428,7 @@ function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/
 	end
 end
 
-function appendLocationToFile(filename, x, y, z, w, comment)
-	if filename == "" or LEX.tableHasValue(reservedFilenames, filename) then
-		debugMsg("appendLocationToFile: not a valid filename")
-		return false
-	end
-
-	local content = ""
-
-	-- first check if file already exists and read it if so
-	if LEX.fileExists(filename) then
-		local file = io.open(filename,"r")
-		content = file:read("*a")
-		content = content .. "\n"
-		file:close()
-	end
-
-	-- append new data
-	-- 3 decimals should be plenty
-	content = content .. string.format("%.3f", x) .. " " .. string.format("%.3f", y) .. " " .. string.format("%.3f", z) .. " " .. tostring(w)
-
-	if comment ~= "" then -- only append comment if there is one
-		content = content .. " // " .. comment
-	end
-
-	local file = io.open(filename, "w")
-	file:write(content)
-	file:close()
-	debugMsg("Appended", filename, x, y, z, w, comment)
-	return true
-end
-
 function placeMapPin(x,y,z,w) -- from CET Snippets discord
-	debugMsg("placing map pin at " ..  x .. " " .. y .. " " .. z .. " " ..w)
 	local mappinData = MappinData.new()
 	mappinData.mappinType = TweakDBID.new('Mappins.DefaultStaticMappin')
 	mappinData.variant = gamedataMappinVariant.CustomPositionVariant -- see more types: https://github.com/WolvenKit/CyberCAT/blob/main/CyberCAT.Core/Enums/Dumped%20Enums/gamedataMappinVariant.cs
@@ -522,7 +440,6 @@ end
 
 function markPackage(i) -- i = package index
 	if activeMappins[i] then
-		debugMsg("markPackage(" .. tostring(i) .. ") = package already marked")
 		return false
 	end
 
@@ -530,26 +447,17 @@ function markPackage(i) -- i = package index
 	local mappin_id = placeMapPin(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
 	if mappin_id then
 		activeMappins[i] = mappin_id
-		debugMsg("markPackage(" .. tostring(i) .. ") = OK")
 		return mappin_id
-	else
-		debugMsg("markPackage(" .. tostring(i) .. ") = error")
-		return false
 	end
-
+	return false
 end
 
 function unmarkPackage(i)
 	if activeMappins[i] then
         Game.GetMappinSystem():UnregisterMappin(activeMappins[i])
       	activeMappins[i] = nil
-        debugMsg("unmarkPackage(" .. tostring(i) .. ") = OK")
         return true
-    else
-    	debugMsg("unmarkPackage(" .. tostring(i) .. ") = marker not active")
-    	return false
     end
-    debugMsg("unmarkPackage(" .. tostring(i) .. ") = error?")
     return false
 end	
 
@@ -559,7 +467,6 @@ function removeAllMappins()
 			unmarkPackage(k)
 		end
 	end
-	debugMsg("removeAllMappins() OK")
 end
 
 function findNearestPackage(ignoreFound)
@@ -589,12 +496,7 @@ function findNearestPackage(ignoreFound)
 end
 
 function markNearestPackage()
-	if not isInGame then
-		return
-	end
-
 	removeAllMappins()
-
 	local NP = findNearestPackage(true) -- true to ignore found packages
 	if NP then
 		markPackage(NP)
@@ -606,53 +508,36 @@ function markNearestPackage()
 end
 
 function switchLocationsFile(newFile)
-	if newFile == "NONE" then
+	if newFile == false then -- false == mod disabled
 		reset()
 		LOADED_PACKAGES = {}
-		debugMsg("switchLocationsFile(" .. newFile .. ") = mod disabled")
 		return true
 	end
 
 	local path = "Maps/" .. newFile
 
-	if LEX.fileExists(path) and not LEX.tableHasValue(reservedFilenames, newFile) then
-		debugMsg("switchLocationsFile(" .. newFile .. ")")
-
-		if isInGame then
-			-- regular switch
-			reset()
-			MOD_SETTINGS.MapFile = newFile
-			LOADED_PACKAGES = readHPLocations(newFile)
-			
-			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (ingame)")
-			checkIfPlayerNearAnyPackage()
-		else
-			-- in main menu or something
-			MOD_SETTINGS.MapFile = newFile
-			LOADED_PACKAGES = readHPLocations(newFile)
-			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (not ingame)")
-		end
-
+	if LEX.fileExists(path) then
+		reset()
+		LOADED_PACKAGES = readHPLocations(path)
+		checkIfPlayerNearAnyPackage()
 		return true
-	else
-		debugMsg("switchLocationsFile(" .. newFile .. ") = error (file not exist or reserved)")
-		return false
 	end
+	return false
 end
 
 function checkIfPlayerNearAnyPackage()
 	local loopStarted = os.clock()
 
-	if MOD_SETTINGS.MapFile == "NONE" then -- mod disabled more or less
+	if MOD_SETTINGS.MapFile == false then -- mod disabled more or less
 		return
 	end
 
-	if isInGame == false then
+	if not isInGame or isPaused then
 		return
 	end
 
 	if (loopStarted - lastCheck) < checkThrottle then
-		return
+		return -- too soon
 	else
 		lastCheck = loopStarted
 		debugMsg("check at " .. tostring(lastCheck))
@@ -732,7 +617,7 @@ function checkIfPlayerNearAnyPackage()
 		local loopTime = os.clock() - loopStarted
 		
 		table.insert(loopTimesAvg, loopTime)
-		if LEX.tableLen(loopTimesAvg) > 100 then
+		if LEX.tableLen(loopTimesAvg) > 20 then
 			table.remove(loopTimesAvg, 0)
 			performanceTextbox3 = "avg: " .. tostring(LEX.tableAvg(loopTimesAvg)) .. "ms"
 		end
@@ -795,7 +680,6 @@ function countCollected()
 end
 
 function rewardAllPackages()
-	-- TODO something more fun
 	Game.AddToInventory("Items.money", 1000000)
 	debugMsg("rewardAllPackages() OK")
 end
@@ -850,32 +734,18 @@ function listFilesInFolder(folder)
 	return files
 end
 
-function getMapProperty(mapfile, what)
-	local path = "Maps/" .. mapfile
+function getMapProperty(path, what) -- what = displayname or identifier
+	local validWhats = {"displayname", "identifier"}
 
-	--print(LEX.fileExists(path))
-	
-	-- TODO optimize
-
-	if what == "identifier" then
-		local lines = {}
-		for line in io.lines(path) do
-			if LEX.stringStarts(line, "IDENTIFIER:") then
-				 return string.match(line, ":(.*)") -- https://stackoverflow.com/a/50398252
-			end
-		end
-		return mapfile
-
-	elseif what == "displayname" then
-		local lines = {}
-		for line in io.lines(path) do
-			if LEX.stringStarts(line, "DISPLAY_NAME:") then
-				 return string.match(line, ":(.*)") -- https://stackoverflow.com/a/50398252
-			end
-		end
-		return mapfile
+	if not LEX.fileExists(path) or not LEX.tableHasValue(validWhats, what) then
+		return false
 	end
 
-	return false
-
+	for line in io.lines(path) do
+		if LEX.stringStarts(line, "DISPLAY_NAME:") and what == "displayname" then
+			return string.match(line, ":(.*)") -- https://stackoverflow.com/a/50398252
+		elseif LEX.stringStarts(line, "IDENTIFIER:") and what == "identifier" then
+			return string.match(line, ":(.*)") -- https://stackoverflow.com/a/50398252
+		end
+	end
 end
