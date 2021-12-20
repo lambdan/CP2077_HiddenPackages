@@ -8,7 +8,7 @@ local GameSession = require("Modules/GameSession.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
-local reservedFilenames = {"SETTINGS.json", "DEBUG", "RANDOMIZER", "PERFORMANCE", "DEFAULT", "init.lua", "db.sqlite3", "Hidden Packages.log"}
+local reservedFilenames = {"SETTINGS.json", "DEBUG", "PERFORMANCE", "DEFAULT", "init.lua", "db.sqlite3", "Hidden Packages.log"}
 local defaultLocationsFile = "packages1.map" -- should not have the Maps/
 
 local userData = { -- will persist
@@ -17,8 +17,6 @@ local userData = { -- will persist
 
 local MOD_SETTINGS = {
 	DebugMode = false,
-	RandomizerShown = false,
-	RandomizerAmount = 100,
 	ShowPerformanceWindow = false,
 	CreationModeFile = "CREATED.map",
 	NearPackageRange = 100,
@@ -151,10 +149,6 @@ registerForEvent('onInit', function()
 		MOD_SETTINGS.DebugMode = state
 		saveSettings()
 	end)
-	nativeSettings.addSwitch("/Hidden Packages/Advanced", "Show Randomizer", "Enables the (dumb) randomizer in the CET overlay", MOD_SETTINGS.RandomizerShown, false, function(state)
-		MOD_SETTINGS.RandomizerShown = state
-		saveSettings()
-	end) 
 	nativeSettings.addSwitch("/Hidden Packages/Advanced", "Show Performance Window", "Show performance metrics", MOD_SETTINGS.ShowPerformanceWindow, false, function(state)
 		MOD_SETTINGS.ShowPerformanceWindow = state
 		saveSettings()
@@ -246,16 +240,6 @@ registerForEvent('onDraw', function()
 
 		ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(LOADED_PACKAGES)))
 		
-		if MOD_SETTINGS.RandomizerShown then
-			ImGui.Text("Randomizer:")
-			MOD_SETTINGS.RandomizerAmount = ImGui.InputInt("Packages", MOD_SETTINGS.RandomizerAmount, 100)
-			if ImGui.Button("Generate") then
-				switchLocationsFile(generateRandomPackages(MOD_SETTINGS.RandomizerAmount))
-				debugMsg("HP Randomizer done")
-				saveSettings()
-			end
-			ImGui.Separator()
-		end
 
 
 
@@ -584,33 +568,6 @@ function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/
 				and not not Game['GetMountedVehicle;GameObject'](Game.GetPlayer())
 		end
 	end
-end
-
-function generateRandomPackages(n)
-	debugMsg("generating " .. n .. " random packages...")
-
-	local filename = tostring(n) .. " random packages (" .. os.date("%Y%m%d-%H%M%S") .. ")"
-	LOADED_PACKAGES = {}
-	local i = 1
-	local content = ""
-	while (i <= n) do
-		x = math.random(-2623, 3598)
-		y = math.random(-4011, 3640)
-		z = math.random(1, 120)
-		w = 1
-
-		content = content .. string.format("%.3f", x) .. " " .. string.format("%.3f", y) .. " " .. string.format("%.3f", z) .. " " .. tostring(w) .. "\n"
-
-		i = i + 1
-	end
-
-	local file = io.open(filename, "w")
-	file:write(content)
-	file:close()
-
-	-- save to file and return filename
-	return filename
-
 end
 
 function appendLocationToFile(filename, x, y, z, w, comment)
