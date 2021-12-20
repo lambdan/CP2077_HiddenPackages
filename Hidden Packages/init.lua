@@ -18,7 +18,6 @@ local userData = { -- will persist
 local MOD_SETTINGS = {
 	DebugMode = false,
 	ShowPerformanceWindow = false,
-	CreationModeFile = "CREATED.map",
 	NearPackageRange = 100,
 	HintAudioEnabled = false,
 	HintAudioRange = 200,
@@ -31,12 +30,7 @@ local HUDMessage_Current = ""
 local HUDMessage_Last = 0
 
 local statusMsg = ""
-local showCreationWindow = false
 local showScaryButtons = false
-
-local Create_NewCreationFile = MOD_SETTINGS.CreationModeFile
-local Create_NewLocationComment = ""
-local Create_Message = ""
 
 -- props
 local PACKAGE_PROP = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent"
@@ -62,14 +56,6 @@ local performanceTextbox3 = "text 3"
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
-end)
-
-registerHotkey("hp_toggle_create_window", "Toggle creation window", function()
-	showCreationWindow = not showCreationWindow
-	if showCreationWindow == false then
-		switchLocationsFile(MOD_SETTINGS.MapFile) -- restore
-		checkIfPlayerNearAnyPackage()
-	end
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -181,7 +167,6 @@ registerForEvent('onInit', function()
         	userData.locFile = nil
         end
 
-        Create_Message = "Lets go place some packages"
         checkIfPlayerNearAnyPackage() -- otherwise if you made a save near a package and just stand still it wont spawn until you move
     end)
 
@@ -322,83 +307,6 @@ registerForEvent('onDraw', function()
 		-- 	end
 
 		-- end
-
-		ImGui.End()
-	end
-
-
-
-
-	if showCreationWindow then
-		ImGui.Begin("Hidden Packages: Creation Mode")
-
-		ImGui.Text("Status: " .. Create_Message) -- status message
-
-		if isInGame then
-			checkIfPlayerNearAnyPackage()
-			ImGui.Text("Player Position:")
-			local position = Game.GetPlayer():GetWorldPosition()
-			ImGui.Text("X: " .. string.format("%.3f", position["x"]))
-			ImGui.SameLine()
-			ImGui.Text("\tY: " .. string.format("%.3f", position["y"]))
-
-			ImGui.Text("Z: " .. string.format("%.3f", position["z"]))
-			ImGui.SameLine()
-			ImGui.Text("\tW: " .. tostring(position["w"]))
-
-			ImGui.Separator()
-			ImGui.Text("(" .. tostring(LEX.tableLen(LOADED_PACKAGES)) .. " packages)")
-
-			local NP = findNearestPackage(false) -- false to ignore if its collected or not
-			if NP then
-				ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToPackage(NP)) .. "M away")
-			end
-
-			ImGui.Separator()
-			Create_NewCreationFile = ImGui.InputText("File", Create_NewCreationFile, 50)
-			Create_NewLocationComment = ImGui.InputText("Comment", Create_NewLocationComment, 50)
-			if ImGui.Button("Save This Location") then
-
-				local position = Game.GetPlayer():GetWorldPosition()
-				if appendLocationToFile(Create_NewCreationFile, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
-					HUDMessage("Location saved!")
-					Create_Message = "Location saved!"
-					Create_NewLocationComment = ""
-					MOD_SETTINGS.CreationModeFile = Create_NewCreationFile
-				else
-					Create_Message = "Error saving location :("
-				end
-			
-			end
-
-			if ImGui.Button("Apply & Test") then
-				switchLocationsFile(Create_NewCreationFile)
-				Create_Message = tostring(LEX.tableLen(LOADED_PACKAGES)) .. " packages applied & loaded"
-			end
-			ImGui.Separator()
-
-			if ImGui.Button("Mark ALL packages on map") then
-				removeAllMappins()
-				for k,v in pairs(LOADED_PACKAGES) do
-					markPackage(k)
-				end
-			end
-
-			if ImGui.Button("Remove all map pins") then
-				removeAllMappins()
-			end
-
-		else
-			Create_Message = "Not in-game"
-		end
-
-		ImGui.Separator()
-		ImGui.Text("Note: Packages aren\'t collected when you have this window open")
-		if ImGui.Button("Close") then
-			showCreationWindow = false
-			switchLocationsFile(MOD_SETTINGS.MapFile) -- restore
-			checkIfPlayerNearAnyPackage() -- cleans up any leftover packages
-		end
 
 		ImGui.End()
 	end
@@ -710,20 +618,13 @@ function switchLocationsFile(newFile)
 	if LEX.fileExists(path) and not LEX.tableHasValue(reservedFilenames, newFile) then
 		debugMsg("switchLocationsFile(" .. newFile .. ")")
 
-		if isInGame and not showCreationWindow then
+		if isInGame then
 			-- regular switch
 			reset()
 			MOD_SETTINGS.MapFile = newFile
 			LOADED_PACKAGES = readHPLocations(newFile)
 			
 			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (ingame)")
-			checkIfPlayerNearAnyPackage()
-		elseif isInGame and showCreationWindow then
-			-- creation mode = bascially same as not creation mode but dont change MOD_SETTINGS.MapFile
-			reset()
-			LOADED_PACKAGES = readHPLocations(newFile)
-
-			debugMsg("switchLocationsFile(" .. newFile .. ") = OK (ingame creation mode)")
 			checkIfPlayerNearAnyPackage()
 		else
 			-- in main menu or something
@@ -788,30 +689,18 @@ function checkIfPlayerNearAnyPackage()
 
 		if d ~= nil and d <= MOD_SETTINGS.NearPackageRange then -- player is in spawning range of package
 
-			if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) or showCreationWindow then
-				-- player has not collected package OR is in creation mode = should spawn the package
+			if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) then
+				-- player has not collected package
 
 				if not activePackages[k] then -- package is not already spawned
 					spawnPackage(k)
 				end
 
-				if (d <= 0.75) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected?
-
-					if showCreationWindow then -- no dont collect it because creation mode is active
-						GameHUD.ShowWarning("Simulated Package Collection (Package " .. tostring(k) .. ")")
-					else
-						-- yes, player is actually playing, lets get it 
-						collectHP(k)
-					end
-
+				if (d <= 0.75) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
+					collectHP(k)
 				end
 
 			else
-				-- package is collected or creation mode is not enabled
-				if activePackages[k] then -- package can be active here if player collected package and then opened and closed creation window
-					despawnPackage(k)
-				end
-
 				distanceToNearestPackage = nil
 			end
 
@@ -825,8 +714,6 @@ function checkIfPlayerNearAnyPackage()
 	end
 
 	if distanceToNearestPackage ~= nil then
-
-
 		-- adjust checkThrottle based on distance to nearest package
 		if distanceToNearestPackage <= checkRange then
 			checkThrottle = distanceToNearestPackage / 100
@@ -837,12 +724,9 @@ function checkIfPlayerNearAnyPackage()
 		else
 			checkThrottle = 1
 		end
-
 	else
 		checkThrottle = 1 -- otherwise checkThrottle stuck at the spam value when all packages are collected
 	end
-
-
 
 	if MOD_SETTINGS.ShowPerformanceWindow then
 		local loopTime = os.clock() - loopStarted
@@ -926,7 +810,7 @@ function distanceToCoordinates(x,y,z,w)
 end
 
 function audioHint(i)
-	if (os.clock() - lastAudioHint) < 0.1 or showCreationWindow or isPaused then
+	if (os.clock() - lastAudioHint) < 0.1 or isPaused then
 		return
 	end
 	Game.GetAudioSystem():Play('ui_hacking_access_granted')
