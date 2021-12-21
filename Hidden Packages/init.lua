@@ -41,8 +41,10 @@ local NEED_TO_REFRESH = false
 
 local distanceToNearestPackage = nil -- make it a global so we can show it in debug
 local lastCheck = 0
-local lastAudioHint = 0
 local checkThrottle = 1
+
+local SONAR_PACKAGE = nil
+local SONAR_NEXT = 0
 
 -- performance stuff
 local loopTimesAvg = {}
@@ -169,6 +171,12 @@ registerForEvent('onInit', function()
 
 end)
 
+registerForEvent('onUpdate', function(delta)
+    if MOD_SETTINGS.HintAudioEnabled and not isPaused and isInGame and SONAR_PACKAGE ~= nil then
+    	sonar()
+    end
+end)
+
 registerForEvent('onDraw', function()
 
 	if MOD_SETTINGS.ShowPerformanceWindow then
@@ -193,6 +201,7 @@ registerForEvent('onDraw', function()
 		ImGui.Text("countCollected(): " .. tostring(countCollected()))
 		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
 		ImGui.Text("distanceToNearestPackage: " .. tostring(distanceToNearestPackage))
+		ImGui.Text("SONAR_PACKAGE: " .. tostring(SONAR_PACKAGE))
 
 		local c = 0 
 		for k,v in pairs(activePackages) do
@@ -271,7 +280,9 @@ function collectHP(packageIndex)
 	-- got all packages?
     if (countCollected() == LEX.tableLen(LOADED_PACKAGES)) and (LEX.tableLen(LOADED_PACKAGES) > 0) then
     	debugMsg("Got all packages")
-    	GameHUD.ShowWarning("All Hidden Packages collected!")
+    	GameHUD.ShowWarning("All hidden packages collected!")
+    	--GameHUD.ShowWarning("All packages from the \'" .. mapProperties(MOD_SETTINGS.MapPath)["display_name"] .. "\' map has been collected!")
+    	--showShard("All Hidden Packages Collected!", "You have collected all packages from the \'" .. mapProperties(MOD_SETTINGS.MapPath)["display_name"] .. "\' map!")
     	rewardAllPackages()
     end
 end
@@ -467,9 +478,10 @@ function checkIfPlayerNearAnyPackage()
 			end
 		end
 
-		if MOD_SETTINGS.HintAudioEnabled and d ~= nil and d <= MOD_SETTINGS.HintAudioRange and (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then
-			-- audio hints enabled + in audio hint range + package not collected
-			audioHint(k)
+		if MOD_SETTINGS.HintAudioEnabled and d ~= nil and d <= MOD_SETTINGS.HintAudioRange and LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false then
+			if SONAR_PACKAGE == nil or d == distanceToNearestPackage then
+				SONAR_PACKAGE = k
+			end
 		end
 
 		if d ~= nil and d <= MOD_SETTINGS.SpawnPackageRange then -- player is in spawning range of package
@@ -483,6 +495,7 @@ function checkIfPlayerNearAnyPackage()
 
 				if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
 					collectHP(k)
+					SONAR_PACKAGE = nil
 				end
 
 			else
@@ -564,13 +577,7 @@ function distanceToPackage(i)
 	return Vector4.Distance(Game.GetPlayer():GetWorldPosition(), ToVector4{x=pkg["x"], y=pkg["y"], z=pkg["z"], w=pkg["w"]})
 end
 
-function audioHint(i)
-	if (os.clock() - lastAudioHint) < 0.1 or isPaused then
-		return
-	end
-	Game.GetAudioSystem():Play('ui_hacking_access_granted')
-	lastAudioHint = os.clock()
-end
+
 
 function saveSettings()
 	local file = io.open("SETTINGS.json", "w")
@@ -636,4 +643,24 @@ function mapProperties(path)
 	response.display_name_with_amount = response.display_name .. " (" .. tostring(response.amount) .. ")"
 
 	return response
+end
+
+function showShard(title, text)
+	-- from discord/psiberx
+	Game.GetUISystem():QueueEvent(NotifyShardRead.new({ title = title, text = text }))
+end
+
+function sonar()
+	if os.clock() < SONAR_NEXT then
+		return
+	end
+	Game.GetAudioSystem():Play('ui_hacking_access_granted')
+
+	local d = distanceToPackage(SONAR_PACKAGE)
+	local sonarThrottle = (MOD_SETTINGS.HintAudioRange - (MOD_SETTINGS.HintAudioRange - d)) / 100
+	if sonarThrottle < 0.1 then
+		sonarThrottle = 0.1
+	end
+
+	SONAR_NEXT = os.clock() + sonarThrottle
 end
