@@ -39,6 +39,7 @@ local isInGame = false
 local isPaused = true
 local NEED_TO_REFRESH = false
 
+local distanceToNearestPackage = nil -- make it a global so we can show it in debug
 local lastCheck = 0
 local lastAudioHint = 0
 local checkThrottle = 1
@@ -191,6 +192,7 @@ registerForEvent('onDraw', function()
 		ImGui.Text("SESSION_DATA.collected: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)))
 		ImGui.Text("countCollected(): " .. tostring(countCollected()))
 		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
+		ImGui.Text("distanceToNearestPackage: " .. tostring(distanceToNearestPackage))
 
 		local c = 0 
 		for k,v in pairs(activePackages) do
@@ -286,9 +288,7 @@ end
 
 function destroyAllPackageObjects()
 	for k,v in pairs(LOADED_PACKAGES) do
-		if activePackages[k] then
-			despawnPackage(k)
-		end
+		despawnPackage(k)
 	end
 end
 
@@ -323,14 +323,6 @@ function readHPLocations(path)
 	return packages
 end
 
--- from CET Snippets discord... could be useful, maybe for reward? or warning window?
--- function showCustomShardPopup(titel, text)
---     shardUIevent = NotifyShardRead.new()
---     shardUIevent.title = titel
---     shardUIevent.text = text
---     Game.GetUISystem():QueueEvent(shardUIevent)
--- end
-
 function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/cyberpunk2077/mods/2920)
 	local ws = Game.GetWorkspotSystem()
 	local player = Game.GetPlayer()
@@ -346,11 +338,11 @@ end
 function placeMapPin(x,y,z,w) -- from CET Snippets discord
 	local mappinData = MappinData.new()
 	mappinData.mappinType = TweakDBID.new('Mappins.DefaultStaticMappin')
-	mappinData.variant = gamedataMappinVariant.CustomPositionVariant -- see more types: https://github.com/WolvenKit/CyberCAT/blob/main/CyberCAT.Core/Enums/Dumped%20Enums/gamedataMappinVariant.cs
+	mappinData.variant = gamedataMappinVariant.CustomPositionVariant 
+	-- more types: https://github.com/WolvenKit/CyberCAT/blob/main/CyberCAT.Core/Enums/Dumped%20Enums/gamedataMappinVariant.cs
 	mappinData.visibleThroughWalls = true   
 
-	local position = ToVector4{x=x, y=y, z=z, w=w}
-	return Game.GetMappinSystem():RegisterMappin(mappinData, position) -- returns ID
+	return Game.GetMappinSystem():RegisterMappin(mappinData, ToVector4{x=x, y=y, z=z, w=w} ) -- returns ID
 end
 
 function markPackage(i) -- i = package index
@@ -378,19 +370,17 @@ end
 
 function removeAllMappins()
 	for k,v in pairs(LOADED_PACKAGES) do
-		if activeMappins[k] then
-			unmarkPackage(k)
-		end
+		unmarkPackage(k)
 	end
 end
 
-function findNearestPackage(ignoreFound)
+function findNearestPackage()
 	local lowest = nil
 	local nearestPackage = false
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
 	for k,v in pairs(LOADED_PACKAGES) do
-		if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) or (ignoreFound == false) then
+		if LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false then
 			
 			local distance = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
 			
@@ -411,9 +401,9 @@ function findNearestPackage(ignoreFound)
 end
 
 function markNearestPackage()
-	removeAllMappins()
-	local NP = findNearestPackage(true) -- true to ignore found packages
+	local NP = findNearestPackage()
 	if NP then
+		removeAllMappins()
 		markPackage(NP)
 		HUDMessage("Nearest Package Marked (" .. string.format("%.f", distanceToPackage(NP)) .. "M away)")
 		return true
@@ -435,20 +425,16 @@ function switchLocationsFile(path)
 		checkIfPlayerNearAnyPackage()
 		return true
 	end
+
 	return false
 end
 
 function checkIfPlayerNearAnyPackage()
+	if (MOD_SETTINGS.MapPath == false) or (isPaused == true) or (isInGame == false) then
+		return
+	end
+
 	local loopStarted = os.clock()
-
-	if MOD_SETTINGS.MapPath == false then -- mod disabled more or less
-		return
-	end
-
-	if not isInGame or isPaused then
-		return
-	end
-
 	if (loopStarted - lastCheck) < checkThrottle then
 		return -- too soon
 	else
@@ -461,7 +447,7 @@ function checkIfPlayerNearAnyPackage()
 		checkRange = MOD_SETTINGS.HintAudioRange
 	end
 
-	local distanceToNearestPackage = nil
+	distanceToNearestPackage = nil
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 	for k,v in pairs(LOADED_PACKAGES) do
 		local d = nil
@@ -482,6 +468,7 @@ function checkIfPlayerNearAnyPackage()
 		end
 
 		if MOD_SETTINGS.HintAudioEnabled and d ~= nil and d <= MOD_SETTINGS.HintAudioRange and (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then
+			-- audio hints enabled + in audio hint range + package not collected
 			audioHint(k)
 		end
 
@@ -499,31 +486,23 @@ function checkIfPlayerNearAnyPackage()
 				end
 
 			else
-				distanceToNearestPackage = nil
+				distanceToNearestPackage = nil -- nil here to chill checkThrottle after collecting the package 
 			end
 
 		else -- player is outside of spawning range
-
-			if activePackages[k] then -- out of range, despawn the package if its active
-				despawnPackage(k)
-			end
-
+			despawnPackage(k)
 		end
 	end
 
-	if distanceToNearestPackage ~= nil then
+	if distanceToNearestPackage ~= nil and distanceToNearestPackage <= checkRange then
 		-- adjust checkThrottle based on distance to nearest package
-		if distanceToNearestPackage <= checkRange then
-			checkThrottle = distanceToNearestPackage / 100
+		checkThrottle = distanceToNearestPackage / 100
 			
-			if checkThrottle < 0.1 then
-				checkThrottle = 0.1
-			end
-		else
-			checkThrottle = 1
+		if checkThrottle < 0.1 then
+			checkThrottle = 0.1
 		end
 	else
-		checkThrottle = 1 -- otherwise checkThrottle stuck at the spam value when all packages are collected
+		checkThrottle = 1
 	end
 
 	if MOD_SETTINGS.ShowPerformanceWindow then
@@ -564,23 +543,6 @@ function HUDMessage(msg)
 	HUDMessage_Last = os:clock()
 end
 
-function clearProgress(LocFile)
-	local c = 0
-	local clearedTable = {}
-	debugMsg("clearProgress(" .. LocFile .. ") - before: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)))
-	for k,v in pairs(SESSION_DATA.collectedPackageIDs) do
-		if not LEX.stringStarts(v, LocFile .. ":") then
-			-- package is not from LocFile, add it to the new (cleared) table
-			table.insert(clearedTable, v)
-		else
-			c = c + 1 -- package is from LocFile and we DO NOT want it back = count it
-		end
-	end
-	SESSION_DATA.collectedPackageIDs = clearedTable
-	debugMsg("clearProgress(" .. LocFile .. ") - after: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)) .. " (uncollected: " .. tostring(c) .. ")")
-	--debugMsg("clearProgress(" .. LocFile .. ") - uncollected " .. tostring(c) .. " pkgs")
-end
-
 function countCollected()
 	-- cant just check length of collectedPackageIDs as it may include packages from other location files
 	local c = 0
@@ -599,11 +561,7 @@ end
 
 function distanceToPackage(i)
 	local pkg = LOADED_PACKAGES[i]
-	return distanceToCoordinates(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
-end
-
-function distanceToCoordinates(x,y,z,w)
-	return Vector4.Distance(Game.GetPlayer():GetWorldPosition(), ToVector4{x=x, y=y, z=z, w=w})
+	return Vector4.Distance(Game.GetPlayer():GetWorldPosition(), ToVector4{x=pkg["x"], y=pkg["y"], z=pkg["z"], w=pkg["w"]})
 end
 
 function audioHint(i)
