@@ -4,20 +4,19 @@ local HiddenPackagesMetadata = {
 }
 
 local GameSession = require("Modules/GameSession.lua")
---local GameUI = require("Modules/GameUI.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
 local defaultLocationsFile = "packages1.map" -- should not have the Maps/
 
-local userData = { -- will persist
+local SESSION_DATA = { -- will persist
 	collectedPackageIDs = {}
 }
 
 local MOD_SETTINGS = {
 	DebugMode = false,
 	ShowPerformanceWindow = false,
-	NearPackageRange = 100,
+	SpawnPackageRange = 100,
 	HintAudioEnabled = false,
 	HintAudioRange = 200,
 	MapFile = defaultLocationsFile
@@ -27,9 +26,6 @@ local LOADED_PACKAGES = {}
 
 local HUDMessage_Current = ""
 local HUDMessage_Last = 0
-
-local statusMsg = ""
-local showScaryButtons = false
 
 -- props
 local PACKAGE_PROP = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent"
@@ -57,14 +53,6 @@ registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
 end)
 
-registerForEvent("onOverlayOpen", function()
-	showWindow = true
-end)
-
-registerForEvent("onOverlayClose", function()
-	showWindow = false
-end)
-
 registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
     reset()
 end)
@@ -81,13 +69,13 @@ registerForEvent('onInit', function()
 
 	-- scan Maps folder and generate table suitable for nativeSettings
 	local mapsFilenames = {[1] = false}
-	local nsMaps = {[1] = "None (Mod disabled)"}
+	local nsMapsDisplayNames = {[1] = "None"}
 	local nsDefaultMap = 1
 	local nsCurrentMap = 1
 	for k,v in pairs(listFilesInFolder("Maps")) do
 		if LEX.stringEnds(v, ".map") then
 			--print(v, "should be added")
-			local i = LEX.tableLen(nsMaps) + 1
+			local i = LEX.tableLen(nsMapsDisplayNames) + 1
 			nsMaps[i] = getMapProperty("Maps/" .. v, "displayname")
 			mapsFilenames[i] = v
 			if v == defaultLocationsFile then
@@ -99,8 +87,7 @@ registerForEvent('onInit', function()
 		end
 	end
 
-	nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "Which map to use (stored in the \'.../mods/Hidden Packages/Maps\' folder). When set to None the mod is practically disabled.", nsMaps, nsCurrentMap, nsDefaultMap, function(value)
-		--print("changed list to", nsMaps[value])
+	nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "Which map to use (stored in the \'.../mods/Hidden Packages/Maps\' folder). When set to None the mod is practically disabled.", nsMapsDisplayNames, nsCurrentMap, nsDefaultMap, function(value)
 		MOD_SETTINGS.MapFile = mapsFilenames[value]
 		saveSettings()
 		NEED_TO_REFRESH = true
@@ -108,40 +95,23 @@ registerForEvent('onInit', function()
 
 	nativeSettings.addSubcategory("/Hidden Packages/AudioHints", "Audio Hints")
 
-	nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Audio Hint", "Plays a sound when you are near a package, in increasing frequency the closer you get close to the package", MOD_SETTINGS.HintAudioEnabled, false, function(state)
+	nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Audio Hint", "Plays a sound when you are near a package, in increasing frequency the closer you get to it (like a sonar)", MOD_SETTINGS.HintAudioEnabled, false, function(state)
 		MOD_SETTINGS.HintAudioEnabled = state
 		saveSettings()
 	end)
 
-	nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Audio Hint Range", "Start playing audio hint when this close to a package", 50, 500, 1, MOD_SETTINGS.HintAudioRange, 200, function(value)
+	nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Audio Hint Range", "Start playing Audio Hint when you are this close to a package", 10, 1000, 1, MOD_SETTINGS.HintAudioRange, 150, function(value)
 		MOD_SETTINGS.HintAudioRange = value
 		saveSettings()
 	end)
 
-	nativeSettings.addSubcategory("/Hidden Packages/Advanced", "Advanced / Development")
-
-	nativeSettings.addRangeInt("/Hidden Packages/Advanced", "Near Package Range", "Spawn package when this close to one", 10, 200, 1, MOD_SETTINGS.NearPackageRange, 100, function(value)
-		MOD_SETTINGS.NearPackageRange = value
-		saveSettings()
-	end)
-
-	nativeSettings.addSwitch("/Hidden Packages/Advanced", "Debug Mode", "Enables debug mode (spams messages about what is going on)", MOD_SETTINGS.DebugMode, false, function(state)
-		MOD_SETTINGS.DebugMode = state
-		saveSettings()
-	end)
-	nativeSettings.addSwitch("/Hidden Packages/Advanced", "Show Performance Window", "Show performance metrics", MOD_SETTINGS.ShowPerformanceWindow, false, function(state)
-		MOD_SETTINGS.ShowPerformanceWindow = state
-		saveSettings()
-	end)
 	-- end NativeSettings
 
 	GameSession.StoreInDir('Sessions')
-	GameSession.Persist(userData)
+	GameSession.Persist(SESSION_DATA)
 	isInGame = Game.GetPlayer() and Game.GetPlayer():IsAttached() and not Game.GetSystemRequestsHandler():IsPreGame()
 
     GameSession.OnStart(function()
-        -- Triggered once the load is complete and the player is in the game
-        -- (after the loading screen for "Load Game" or "New Game")
         debugMsg('Game Session Started')
         isInGame = true
         isPaused = false
@@ -152,32 +122,22 @@ registerForEvent('onInit', function()
         end
 
         -- check if old legacy data exists and wipe it if so
-        if userData.packages then
-        	debugMsg("clearing legacy userData.packages")
-        	userData.packages = nil
+        if SESSION_DATA.packages then
+        	debugMsg("clearing legacy SESSION_DATA.packages")
+        	SESSION_DATA.packages = nil
         end
-        if userData.locFile then
-        	debugMsg("clearing legacy userData.locFile")
-        	userData.locFile = nil
+        if SESSION_DATA.locFile then
+        	debugMsg("clearing legacy SESSION_DATA.locFile")
+        	SESSION_DATA.locFile = nil
         end
 
         checkIfPlayerNearAnyPackage() -- otherwise if you made a save near a package and just stand still it wont spawn until you move
     end)
 
-	--GameSession.OnSave(function()
-	--end)
-
-	--GameSession.OnLoad(function()
-    --    LOADED_PACKAGES = readHPLocations(MOD_SETTINGS.MapFile)
-	--end)
-
     GameSession.OnEnd(function()
-        -- Triggered once the current game session has ended
-        -- (when "Load Game" or "Exit to Main Menu" selected)
         debugMsg('Game Session Ended')
         isInGame = false
-        reset() -- destroy all objects and reset tables etc
-        -- should maybe wipe userData here but it gets properly set when starting a new game or loading a game anyway so not sure its necessary
+        reset()
     end)
 
 	GameSession.OnPause(function()
@@ -215,24 +175,17 @@ registerForEvent('onDraw', function()
 
 	if MOD_SETTINGS.DebugMode then
 		ImGui.Begin("Hidden Packages - Debug")
+		ImGui.Text("MOD_SETTINGS.MapFile: " .. tostring(MOD_SETTINGS.MapFile))
 		ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(LOADED_PACKAGES)))
 		ImGui.Text("isInGame: " .. tostring(isInGame))
 		ImGui.Text("isPaused: " .. tostring(isPaused))
 		ImGui.Text("NEED_TO_REFRESH: " .. tostring(NEED_TO_REFRESH))
 		ImGui.Text("LOADED_PACKAGES: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
-		ImGui.Text("MOD_SETTINGS.MapFile: " .. tostring(MOD_SETTINGS.MapFile))
 		--ImGui.Text("Map identifier: " .. getMapProperty(MOD_SETTINGS.MapFile, "identifier"))
 		--ImGui.Text("Map display name: " .. getMapProperty(MOD_SETTINGS.MapFile, "displayname"))
-		ImGui.Text("userData collected: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
+		ImGui.Text("SESSION_DATA.collected: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)))
 		ImGui.Text("countCollected(): " .. tostring(countCollected()))
 		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
-
-		-- if isInGame then
-		-- 	local NP = findNearestPackage(false) -- false to ignore if its collected or not
-		-- 	if NP then
-		-- 		ImGui.Text("Nearest Package: " .. string.format("%.f", distanceToPackage(NP)) .. "M away")
-		-- 	end
-		-- end
 
 		local c = 0 
 		for k,v in pairs(activePackages) do
@@ -249,47 +202,6 @@ registerForEvent('onDraw', function()
 			end
 		end
 		ImGui.Text("activeMappins: " .. tostring(c))
-
-		-- if isInGame then
-
-		-- 	if ImGui.Button("Show/hide Scary Buttons") then
-		-- 		showScaryButtons = not showScaryButtons
-		-- 	end
-
-		-- 	if showScaryButtons then
-
-		-- 		ImGui.Separator()
-		-- 		ImGui.Text("Warning: One click is all you need.\nNo confirmations!")
-
-		-- 		if ImGui.Button("Load default packages\n(" .. defaultLocationsFile .. ")") then
-		-- 			switchLocationsFile(defaultLocationsFile)
-		-- 		end
-
-		-- 		--if ImGui.Button("Reload current packages\n(" .. userData.locFile .. ")") then
-		-- 		--	LOADED_PACKAGES = readHPLocations(userData.locFile)
-		-- 		--end
-
-		-- 		--if countCollected() > 0 then
-		-- 		--	if ImGui.Button("Reset progress\n(" .. userData.locFile .. ")") then
-		-- 		--		reset()
-		-- 		--		clearProgress(userData.locFile)
-		-- 		--		checkIfPlayerNearAnyPackage()
-		-- 		--	end
-		-- 		--	ImGui.SameLine()
-		-- 		--end
-
-		-- 		if LEX.tableLen(userData.collectedPackageIDs) > 0 then
-		-- 			if ImGui.Button("Reset progress\n(all location files)") then
-		-- 				reset()
-		-- 				userData.collectedPackageIDs = {}
-		-- 				checkIfPlayerNearAnyPackage()
-		-- 			end
-		-- 		end
-
-		-- 	end
-
-		-- end
-
 		ImGui.End()
 	end
 
@@ -318,10 +230,9 @@ end
 
 function despawnPackage(i) -- i = package index
 	if activePackages[i] then
-		if destroyObject(activePackages[i]) then
-			activePackages[i] = nil
-			return true
-		end
+		destroyObject(activePackages[i])
+		activePackages[i] = nil
+		return true
 	end
     return false
 end
@@ -337,8 +248,8 @@ end
 function collectHP(packageIndex)
 	local pkg = LOADED_PACKAGES[packageIndex]
 
-	if not LEX.tableHasValue(userData.collectedPackageIDs, pkg["identifier"]) then
-		table.insert(userData.collectedPackageIDs, pkg["identifier"])
+	if not LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg["identifier"]) then
+		table.insert(SESSION_DATA.collectedPackageIDs, pkg["identifier"])
 	else
 		debugMsg("hmmmmm, this package seems to already be collected???")
 	end
@@ -353,9 +264,9 @@ function collectHP(packageIndex)
     	rewardAllPackages()
     else
     	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LEX.tableLen(LOADED_PACKAGES))
-    	GameHUD.ShowWarning(msg)
-    	--Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
-    	--HUDMessage(msg)
+    	--GameHUD.ShowWarning(msg)
+    	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
+    	HUDMessage(msg)
     end
 end
 
@@ -475,7 +386,7 @@ function findNearestPackage(ignoreFound)
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
 	for k,v in pairs(LOADED_PACKAGES) do
-		if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) or (ignoreFound == false) then
+		if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) or (ignoreFound == false) then
 			
 			local distance = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
 			
@@ -543,7 +454,7 @@ function checkIfPlayerNearAnyPackage()
 		debugMsg("check at " .. tostring(lastCheck))
 	end
 
-	local checkRange = MOD_SETTINGS.NearPackageRange
+	local checkRange = MOD_SETTINGS.SpawnPackageRange
 	if MOD_SETTINGS.HintAudioEnabled and MOD_SETTINGS.HintAudioRange > checkRange then
 		checkRange = MOD_SETTINGS.HintAudioRange
 	end
@@ -568,13 +479,13 @@ function checkIfPlayerNearAnyPackage()
 			end
 		end
 
-		if MOD_SETTINGS.HintAudioEnabled and d ~= nil and d <= MOD_SETTINGS.HintAudioRange and (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) then
+		if MOD_SETTINGS.HintAudioEnabled and d ~= nil and d <= MOD_SETTINGS.HintAudioRange and (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then
 			audioHint(k)
 		end
 
-		if d ~= nil and d <= MOD_SETTINGS.NearPackageRange then -- player is in spawning range of package
+		if d ~= nil and d <= MOD_SETTINGS.SpawnPackageRange then -- player is in spawning range of package
 
-			if (LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) == false) then
+			if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then
 				-- player has not collected package
 
 				if not activePackages[k] then -- package is not already spawned
@@ -654,8 +565,8 @@ end
 function clearProgress(LocFile)
 	local c = 0
 	local clearedTable = {}
-	debugMsg("clearProgress(" .. LocFile .. ") - before: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)))
-	for k,v in pairs(userData.collectedPackageIDs) do
+	debugMsg("clearProgress(" .. LocFile .. ") - before: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)))
+	for k,v in pairs(SESSION_DATA.collectedPackageIDs) do
 		if not LEX.stringStarts(v, LocFile .. ":") then
 			-- package is not from LocFile, add it to the new (cleared) table
 			table.insert(clearedTable, v)
@@ -663,8 +574,8 @@ function clearProgress(LocFile)
 			c = c + 1 -- package is from LocFile and we DO NOT want it back = count it
 		end
 	end
-	userData.collectedPackageIDs = clearedTable
-	debugMsg("clearProgress(" .. LocFile .. ") - after: " .. tostring(LEX.tableLen(userData.collectedPackageIDs)) .. " (uncollected: " .. tostring(c) .. ")")
+	SESSION_DATA.collectedPackageIDs = clearedTable
+	debugMsg("clearProgress(" .. LocFile .. ") - after: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)) .. " (uncollected: " .. tostring(c) .. ")")
 	--debugMsg("clearProgress(" .. LocFile .. ") - uncollected " .. tostring(c) .. " pkgs")
 end
 
@@ -672,7 +583,7 @@ function countCollected()
 	-- cant just check length of collectedPackageIDs as it may include packages from other location files
 	local c = 0
 	for k,v in pairs(LOADED_PACKAGES) do
-		if LEX.tableHasValue(userData.collectedPackageIDs, v["identifier"]) then
+		if LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) then
 			c = c + 1
 		end
 	end
