@@ -7,11 +7,8 @@ local GameSession = require("Modules/GameSession.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
-local defaultLocationsFile = "packages1.map" -- should not have the Maps/
-
-local SESSION_DATA = { -- will persist
-	collectedPackageIDs = {}
-}
+local MAPS_FOLDER = "Maps" -- should NOT end with a /
+local MAP_DEFAULT = "Maps/packages1.map" -- full path to default map
 
 local MOD_SETTINGS = {
 	DebugMode = false,
@@ -19,7 +16,11 @@ local MOD_SETTINGS = {
 	SpawnPackageRange = 100,
 	HintAudioEnabled = false,
 	HintAudioRange = 150,
-	MapFile = defaultLocationsFile
+	MapPath = MAP_DEFAULT
+}
+
+local SESSION_DATA = { -- will persist
+	collectedPackageIDs = {}
 }
 
 local LOADED_PACKAGES = {}
@@ -61,49 +62,56 @@ registerForEvent('onInit', function()
 	loadSettings()
 	NEED_TO_REFRESH = true
 
-	-- generate NativeSettings
-	nativeSettings = GetMod("nativeSettings")
-	nativeSettings.addTab("/Hidden Packages", "Hidden Packages")
-
-	nativeSettings.addSubcategory("/Hidden Packages/Maps", "Maps")
-
 	-- scan Maps folder and generate table suitable for nativeSettings
-	local mapsFilenames = {[1] = false}
+	local mapsPaths = {[1] = false}
 	local nsMapsDisplayNames = {[1] = "None"}
 	local nsDefaultMap = 1
 	local nsCurrentMap = 1
-	for k,v in pairs(listFilesInFolder("Maps")) do
+	for k,v in pairs(listFilesInFolder(MAPS_FOLDER)) do
 		if LEX.stringEnds(v, ".map") then
-			local i = LEX.tableLen(nsMapsDisplayNames) + 1
-			nsMapsDisplayNames[i] = mapProperties("Maps/" .. v)["display_name"]
-			mapsFilenames[i] = v
-			if v == defaultLocationsFile then
+			local i = LEX.tableLen(mapsPaths) + 1
+			local map_path = MAPS_FOLDER .. "/" .. v
+			
+			nsMapsDisplayNames[i] = mapProperties(map_path)["display_name"]
+			mapsPaths[i] = map_path
+			
+			if map_path == MAP_DEFAULT then
 				nsDefaultMap = i
 			end
-			if v == MOD_SETTINGS.MapFile then
+			
+			if map_path == MOD_SETTINGS.MapPath then
 				nsCurrentMap = i
 			end
 		end
 	end
 
-	nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "Which map to use (stored in the \'.../mods/Hidden Packages/Maps\' folder). When set to None the mod is practically disabled.", nsMapsDisplayNames, nsCurrentMap, nsDefaultMap, function(value)
-		MOD_SETTINGS.MapFile = mapsFilenames[value]
-		saveSettings()
-		NEED_TO_REFRESH = true
-	end)
+	-- generate NativeSettings (if available)
+	nativeSettings = GetMod("nativeSettings")
+	if nativeSettings ~= nil then
 
-	nativeSettings.addSubcategory("/Hidden Packages/AudioHints", "Sonar")
+		nativeSettings.addTab("/Hidden Packages", "Hidden Packages")
 
-	nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Sonar", "Plays a sound when you are near a package in increasing frequency the closer you get to it", MOD_SETTINGS.HintAudioEnabled, false, function(state)
-		MOD_SETTINGS.HintAudioEnabled = state
-		saveSettings()
-	end)
+		nativeSettings.addSubcategory("/Hidden Packages/Maps", "Maps")
 
-	nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Sonar Range", "Sonar starts working when you are this close to a package", 10, 1000, 1, MOD_SETTINGS.HintAudioRange, 150, function(value)
-		MOD_SETTINGS.HintAudioRange = value
-		saveSettings()
-	end)
+		nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "These are stored in \'.../mods/Hidden Packages/Maps\''. If set to None the mod is practically disabled.", nsMapsDisplayNames, nsCurrentMap, nsDefaultMap, function(value)
+			MOD_SETTINGS.MapPath = mapsPaths[value]
+			saveSettings()
+			NEED_TO_REFRESH = true
+		end)
 
+		nativeSettings.addSubcategory("/Hidden Packages/AudioHints", "Sonar")
+
+		nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Sonar", "Plays a sound when you are moving nearby a package in increasing frequency the closer you get to it", MOD_SETTINGS.HintAudioEnabled, false, function(state)
+			MOD_SETTINGS.HintAudioEnabled = state
+			saveSettings()
+		end)
+
+		nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Sonar Range", "Sonar starts working when you are this close to a package", 10, 1000, 1, MOD_SETTINGS.HintAudioRange, 150, function(value)
+			MOD_SETTINGS.HintAudioRange = value
+			saveSettings()
+		end)
+
+	end
 	-- end NativeSettings
 
 	GameSession.StoreInDir('Sessions')
@@ -116,7 +124,7 @@ registerForEvent('onInit', function()
         isPaused = false
         
         if NEED_TO_REFRESH then
-        	switchLocationsFile(MOD_SETTINGS.MapFile)
+        	switchLocationsFile(MOD_SETTINGS.MapPath)
         	NEED_TO_REFRESH = false
         end
 
@@ -147,7 +155,7 @@ registerForEvent('onInit', function()
 		isPaused = false
 
         if NEED_TO_REFRESH then
-        	switchLocationsFile(MOD_SETTINGS.MapFile)
+        	switchLocationsFile(MOD_SETTINGS.MapPath)
         	NEED_TO_REFRESH = false
         end
 	end)
@@ -174,7 +182,7 @@ registerForEvent('onDraw', function()
 
 	if MOD_SETTINGS.DebugMode then
 		ImGui.Begin("Hidden Packages - Debug")
-		ImGui.Text("MOD_SETTINGS.MapFile: " .. tostring(MOD_SETTINGS.MapFile))
+		ImGui.Text("MOD_SETTINGS.MapPath: " .. tostring(MOD_SETTINGS.MapPath))
 		ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(LOADED_PACKAGES)))
 		ImGui.Text("isInGame: " .. tostring(isInGame))
 		ImGui.Text("isPaused: " .. tostring(isPaused))
@@ -261,7 +269,7 @@ function collectHP(packageIndex)
 	-- got all packages?
     if (countCollected() == LEX.tableLen(LOADED_PACKAGES)) and (LEX.tableLen(LOADED_PACKAGES) > 0) then
     	debugMsg("Got all packages")
-    	GameHUD.ShowWarning("All Hidden Packages from \'" .. mapProperties(MOD_SETTINGS.MapFile)["display_name"] .. "\' collected!")
+    	GameHUD.ShowWarning("All Hidden Packages from \'" .. mapProperties(MOD_SETTINGS.MapPath)["display_name"] .. "\' collected!")
     	rewardAllPackages()
     end
 end
@@ -414,14 +422,12 @@ function markNearestPackage()
 	return false
 end
 
-function switchLocationsFile(newFile)
-	if newFile == false then -- false == mod disabled
+function switchLocationsFile(path)
+	if path == false then -- false == mod disabled
 		reset()
 		LOADED_PACKAGES = {}
 		return true
 	end
-
-	local path = "Maps/" .. newFile
 
 	if LEX.fileExists(path) then
 		reset()
@@ -435,7 +441,7 @@ end
 function checkIfPlayerNearAnyPackage()
 	local loopStarted = os.clock()
 
-	if MOD_SETTINGS.MapFile == false then -- mod disabled more or less
+	if MOD_SETTINGS.MapPath == false then -- mod disabled more or less
 		return
 	end
 
