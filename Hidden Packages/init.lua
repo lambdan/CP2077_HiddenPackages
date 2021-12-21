@@ -269,7 +269,7 @@ function collectHP(packageIndex)
 	-- got all packages?
     if (countCollected() == LEX.tableLen(LOADED_PACKAGES)) and (LEX.tableLen(LOADED_PACKAGES) > 0) then
     	debugMsg("Got all packages")
-    	GameHUD.ShowWarning("All Hidden Packages from \'" .. mapProperties(MOD_SETTINGS.MapPath)["display_name"] .. "\' collected!")
+    	GameHUD.ShowWarning("All Hidden Packages collected!")
     	rewardAllPackages()
     end
 end
