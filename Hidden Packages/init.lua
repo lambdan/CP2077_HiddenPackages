@@ -481,7 +481,7 @@ function checkIfPlayerNearAnyPackage()
 					spawnPackage(k)
 				end
 
-				if (d <= 0.75) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
+				if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
 					collectHP(k)
 				end
 
