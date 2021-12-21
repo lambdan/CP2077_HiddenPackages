@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "1.0.3.1"
+	version = "2.0.0"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -18,7 +18,7 @@ local MOD_SETTINGS = {
 	ShowPerformanceWindow = false,
 	SpawnPackageRange = 100,
 	HintAudioEnabled = false,
-	HintAudioRange = 200,
+	HintAudioRange = 150,
 	MapFile = defaultLocationsFile
 }
 
@@ -74,9 +74,8 @@ registerForEvent('onInit', function()
 	local nsCurrentMap = 1
 	for k,v in pairs(listFilesInFolder("Maps")) do
 		if LEX.stringEnds(v, ".map") then
-			--print(v, "should be added")
 			local i = LEX.tableLen(nsMapsDisplayNames) + 1
-			nsMaps[i] = getMapProperty("Maps/" .. v, "displayname")
+			nsMapsDisplayNames[i] = mapProperties("Maps/" .. v)["display_name"]
 			mapsFilenames[i] = v
 			if v == defaultLocationsFile then
 				nsDefaultMap = i
@@ -93,14 +92,14 @@ registerForEvent('onInit', function()
 		NEED_TO_REFRESH = true
 	end)
 
-	nativeSettings.addSubcategory("/Hidden Packages/AudioHints", "Audio Hints")
+	nativeSettings.addSubcategory("/Hidden Packages/AudioHints", "Sonar")
 
-	nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Audio Hint", "Plays a sound when you are near a package, in increasing frequency the closer you get to it (like a sonar)", MOD_SETTINGS.HintAudioEnabled, false, function(state)
+	nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Sonar", "Plays a sound when you are near a package in increasing frequency the closer you get to it", MOD_SETTINGS.HintAudioEnabled, false, function(state)
 		MOD_SETTINGS.HintAudioEnabled = state
 		saveSettings()
 	end)
 
-	nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Audio Hint Range", "Start playing Audio Hint when you are this close to a package", 10, 1000, 1, MOD_SETTINGS.HintAudioRange, 150, function(value)
+	nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Sonar Range", "Sonar starts working when you are this close to a package", 10, 1000, 1, MOD_SETTINGS.HintAudioRange, 150, function(value)
 		MOD_SETTINGS.HintAudioRange = value
 		saveSettings()
 	end)
@@ -181,8 +180,6 @@ registerForEvent('onDraw', function()
 		ImGui.Text("isPaused: " .. tostring(isPaused))
 		ImGui.Text("NEED_TO_REFRESH: " .. tostring(NEED_TO_REFRESH))
 		ImGui.Text("LOADED_PACKAGES: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
-		--ImGui.Text("Map identifier: " .. getMapProperty(MOD_SETTINGS.MapFile, "identifier"))
-		--ImGui.Text("Map display name: " .. getMapProperty(MOD_SETTINGS.MapFile, "displayname"))
 		ImGui.Text("SESSION_DATA.collected: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)))
 		ImGui.Text("countCollected(): " .. tostring(countCollected()))
 		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
@@ -257,16 +254,15 @@ function collectHP(packageIndex)
 	unmarkPackage(packageIndex)
 	despawnPackage(packageIndex)
 
+	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LEX.tableLen(LOADED_PACKAGES))
+	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
+	HUDMessage(msg)
+
+	-- got all packages?
     if (countCollected() == LEX.tableLen(LOADED_PACKAGES)) and (LEX.tableLen(LOADED_PACKAGES) > 0) then
-    	-- got em all
     	debugMsg("Got all packages")
-    	GameHUD.ShowWarning("All Hidden Packages collected!")
+    	GameHUD.ShowWarning("All Hidden Packages from \'" .. mapProperties(MOD_SETTINGS.MapFile)["display_name"] .. "\' collected!")
     	rewardAllPackages()
-    else
-    	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LEX.tableLen(LOADED_PACKAGES))
-    	--GameHUD.ShowWarning(msg)
-    	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
-    	HUDMessage(msg)
     end
 end
 
@@ -289,7 +285,7 @@ function destroyAllPackageObjects()
 end
 
 function readHPLocations(path)
-	local mapIdentifier = getMapProperty(path, "identifier")
+	local mapIdentifier = mapProperties(path)["identifier"]
 
 	local lines = {}
 	for line in io.lines(path) do
@@ -645,18 +641,35 @@ function listFilesInFolder(folder)
 	return files
 end
 
-function getMapProperty(path, what) -- what = displayname or identifier
-	local validWhats = {"displayname", "identifier"}
+function mapProperties(path)
+	local response = {
+		amount = 0,
+		display_name = "",
+		display_name_with_amount = "()",
+		identifier = "",
+		path = path
+	}
 
-	if not LEX.fileExists(path) or not LEX.tableHasValue(validWhats, what) then
+	if not LEX.fileExists(path) then
 		return false
 	end
 
 	for line in io.lines(path) do
-		if LEX.stringStarts(line, "DISPLAY_NAME:") and what == "displayname" then
-			return string.match(line, ":(.*)") -- https://stackoverflow.com/a/50398252
-		elseif LEX.stringStarts(line, "IDENTIFIER:") and what == "identifier" then
-			return string.match(line, ":(.*)") -- https://stackoverflow.com/a/50398252
+		
+		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
+
+			if LEX.stringStarts(line, "DISPLAY_NAME:") then
+				response.display_name = LEX.trim(string.match(line, ":(.*)"))
+			elseif LEX.stringStarts(line, "IDENTIFIER:") then
+				response.identifier = LEX.trim(string.match(line, ":(.*)"))
+			else
+				response.amount = response.amount + 1
+			end
 		end
+
 	end
+
+	response.display_name_with_amount = response.display_name .. " (" .. tostring(response.amount) .. ")"
+
+	return response
 end

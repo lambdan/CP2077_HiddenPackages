@@ -1,18 +1,16 @@
-
 # Blank lines or lines starting with # are ignored and can be used for comments etc.
 
-# IDENTIFIER should be something uniquely identifiying this map, it's used for keeping track of what packages have been collected for instance.
-# So if you just add more points to a map, you should keep it. If you remove them all and want to make a new one, you should switch it.
+# IDENTIFIER should be something uniquely identifiying this map, it's used for keeping track of what packages have been collected.
+# So if you just add more points to a map, you should keep it the same. If you're making a whole new map, you should change it.
 # If you want a user to have to collect all packages all over again you should switch it too.
 
 IDENTIFIER:packages1
 
 # DISPLAY_NAME is what will be shown in the settings UI. It can be pretty.
 
-DISPLAY_NAME:Default Hidden Packages
+DISPLAY_NAME:Included Packages (aka packages1)
 
-# Now for the coordinates:
-
+# Now for the coordinates, they're in this format:
 # X Y Z W (space separated)
 
 # You can also put comments after the coordinate itself, just make sure to put a space after the final W coordinate
@@ -121,3 +119,64 @@ DISPLAY_NAME:Default Hidden Packages
 -259.402 1645.051 66.272 1
 3480.607 -409.980 131.349 1
 -1309.892 -1147.899 18.271 1
+
+// end of original packages1
+
+-2392.924 3467.805 0.427 1
+-2106.748 3616.809 14.185 1
+-1912.607 3943.249 7.015 1
+-1630.642 3085.176 7.118 1
+-1397.352 1272.745 127.082 1
+-1273.180 3042.860 7.373 1
+-1122.898 3522.316 33.688 1
+1836.996 2355.456 186.220 1
+-1496.144 3438.726 15.427 1
+122.571 1143.738 195.044 1
+-20.676 1404.554 120.325 1
+110.266 1699.435 105.749 1
+121.619 1959.600 129.891 1
+-150.745 1955.727 98.005 1
+-17.215 2136.250 104.089 1
+-426.447 2179.784 36.300 1
+-432.923 2049.273 51.012 1
+-546.350 2098.601 59.423 1
+-1580.680 -1967.173 73.044 1
+-1513.260 -1816.048 78.710 1
+-1403.813 -1703.548 61.639 1
+-1339.882 -1510.589 10.595 1
+-579.050 -3521.379 46.317 1
+-1486.043 296.008 13.344 1
+-1500.539 358.281 17.330 1
+-2416.668 358.678 11.230 1
+-2342.150 542.976 11.324 1
+-2270.612 483.777 7.250 1
+-2142.605 496.135 19.253 1
+-1576.899 -839.749 13.799 1
+-1349.196 -733.423 11.860 1
+-1339.927 -960.179 20.371 1
+-935.083 -1761.561 16.630 1
+-1159.552 -1611.822 35.645 1
+-1195.540 -1399.449 1.238 1
+-908.924 -1281.405 24.810 1
+-679.509 -1332.989 26.140 1
+-306.242 -1398.700 14.967 1
+-228.323 -1149.995 12.945 1
+-108.985 -922.224 7.637 1
+274.002 -728.060 4.611 1
+186.104 -771.217 21.779 1
+370.252 -1026.448 24.716 1
+-574.141 -354.329 0.242 1
+707.959 -759.516 22.428 1
+949.887 -843.104 29.420 1
+922.709 -1048.625 32.108 1
+915.797 -1260.148 38.360 1
+1164.019 -1488.455 52.143 1
+1376.067 -1733.797 49.220 1
+1109.597 -1803.350 117.929 1
+977.374 -1413.491 36.112 1
+669.825 -1140.690 28.154 1
+-1494.339 1004.564 24.409 1
+-1710.078 969.939 14.999 1
+-1415.766 1162.317 34.808 1
+
+// 2012-12-21
