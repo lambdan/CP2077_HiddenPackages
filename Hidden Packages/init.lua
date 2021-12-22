@@ -199,7 +199,7 @@ registerForEvent('onDraw', function()
 		ImGui.Text("countCollected(): " .. tostring(countCollected()))
 		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
 
-		local NP = findNearestPackage()
+		local NP = findNearestPackageWithinRange(0)
 		if NP then
 			ImGui.Text("Nearest package: " .. tostring(NP) .. " (" .. string.format("%.1f", distanceToPackage(NP)) .. "M)")
 		end
@@ -265,12 +265,7 @@ end
 function collectHP(packageIndex)
 	local pkg = LOADED_MAP.packages[packageIndex]
 
-	if not LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg["identifier"]) then
-		table.insert(SESSION_DATA.collectedPackageIDs, pkg["identifier"])
-	else
-		debugMsg("hmmmmm, this package seems to already be collected???")
-	end
-
+	table.insert(SESSION_DATA.collectedPackageIDs, pkg["identifier"])
 	unmarkPackage(packageIndex)
 	despawnPackage(packageIndex)
 
@@ -359,24 +354,26 @@ function removeAllMappins()
 	end
 end
 
-function findNearestPackage()
-	local lowest = nil
+function findNearestPackageWithinRange(range) -- 0 = any range
+	local nearest = nil
 	local nearestPackage = false
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
 	for k,v in pairs(LOADED_MAP.packages) do
 		if LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false then
-			
-			local distance = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
-			
-			if lowest == nil then
-				lowest = distance
-				nearestPackage = k
-			end
-			
-			if distance < lowest then
-				lowest = distance
-				nearestPackage = k
+
+			local d = nil
+
+			if range == 0 or math.abs(playerPos["x"] - v["x"]) <= range then
+				if range == 0 or math.abs(playerPos["y"] - v["y"]) <= range then
+					d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
+
+					if nearest == nil or d < nearest then
+						nearest = d
+						nearestPackage = k
+					end
+
+				end
 			end
 
 		end
@@ -386,7 +383,7 @@ function findNearestPackage()
 end
 
 function markNearestPackage()
-	local NP = findNearestPackage()
+	local NP = findNearestPackageWithinRange(0)
 	if NP then
 		removeAllMappins()
 		markPackage(NP)
@@ -637,9 +634,9 @@ function sonar()
 
 	if SONAR_PKG == nil then
 
-		local NP = findNearestPackage()
+		local NP = findNearestPackageWithinRange(MOD_SETTINGS.HintAudioRange)
 
-		if NP and distanceToPackage(NP) <= MOD_SETTINGS.HintAudioRange then
+		if NP then
 			SONAR_PKG = NP
 		else
 			SONAR_NEXT = os.clock() + 1.5
@@ -663,3 +660,5 @@ function sonar()
 
 	SONAR_NEXT = os.clock() + sonarThrottle
 end
+
+
