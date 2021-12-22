@@ -23,7 +23,7 @@ local SESSION_DATA = { -- will persist
 	collectedPackageIDs = {}
 }
 
-local LOADED_PACKAGES = {}
+local LOADED_MAP = nil
 
 local HUDMessage_Current = ""
 local HUDMessage_Last = 0
@@ -39,12 +39,11 @@ local isInGame = false
 local isPaused = true
 local NEED_TO_REFRESH = false
 
-local distanceToNearestPackage = nil -- make it a global so we can show it in debug
 local lastCheck = 0
 local checkThrottle = 1
 
-local SONAR_PACKAGE = nil
 local SONAR_NEXT = 0
+local SONAR_PKG = nil
 
 -- performance stuff
 local loopTimesAvg = {}
@@ -63,7 +62,7 @@ end)
 
 registerForEvent('onInit', function()
 	loadSettings()
-	NEED_TO_REFRESH = true
+	LOADED_MAP = readMap(MOD_SETTINGS.MapPath)
 
 	-- scan Maps folder and generate table suitable for nativeSettings
 	local mapsPaths = {[1] = false}
@@ -75,7 +74,7 @@ registerForEvent('onInit', function()
 			local i = LEX.tableLen(mapsPaths) + 1
 			local map_path = MAPS_FOLDER .. "/" .. v
 			
-			nsMapsDisplayNames[i] = mapProperties(map_path)["display_name"]
+			nsMapsDisplayNames[i] = readMap(map_path)["display_name"]
 			mapsPaths[i] = map_path
 			
 			if map_path == MAP_DEFAULT then
@@ -172,7 +171,7 @@ registerForEvent('onInit', function()
 end)
 
 registerForEvent('onUpdate', function(delta)
-    if MOD_SETTINGS.HintAudioEnabled and not isPaused and isInGame and SONAR_PACKAGE ~= nil then
+    if MOD_SETTINGS.HintAudioEnabled and not isPaused and isInGame then
     	sonar()
     end
 end)
@@ -181,7 +180,7 @@ registerForEvent('onDraw', function()
 
 	if MOD_SETTINGS.ShowPerformanceWindow then
 		ImGui.Begin("Hidden Packages - Performance")
-		ImGui.Text("loaded packages: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
+		ImGui.Text("loaded map packages: " .. tostring(LOADED_MAP.amount))
 		ImGui.Text(performanceTextbox1)
 		ImGui.Text(performanceTextbox2)
 		ImGui.Text(performanceTextbox3)
@@ -192,16 +191,18 @@ registerForEvent('onDraw', function()
 	if MOD_SETTINGS.DebugMode then
 		ImGui.Begin("Hidden Packages - Debug")
 		ImGui.Text("MOD_SETTINGS.MapPath: " .. tostring(MOD_SETTINGS.MapPath))
-		ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LEX.tableLen(LOADED_PACKAGES)))
+		ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LOADED_MAP.amount))
 		ImGui.Text("isInGame: " .. tostring(isInGame))
 		ImGui.Text("isPaused: " .. tostring(isPaused))
 		ImGui.Text("NEED_TO_REFRESH: " .. tostring(NEED_TO_REFRESH))
-		ImGui.Text("LOADED_PACKAGES: " .. tostring(LEX.tableLen(LOADED_PACKAGES)))
 		ImGui.Text("SESSION_DATA.collected: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)))
 		ImGui.Text("countCollected(): " .. tostring(countCollected()))
 		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
-		ImGui.Text("distanceToNearestPackage: " .. tostring(distanceToNearestPackage))
-		ImGui.Text("SONAR_PACKAGE: " .. tostring(SONAR_PACKAGE))
+
+		local NP = findNearestPackage()
+		if NP then
+			ImGui.Text("Nearest package: " .. tostring(NP) .. " (" .. string.format("%.1f", distanceToPackage(NP)) .. "M)")
+		end
 
 		local c = 0 
 		for k,v in pairs(activePackages) do
@@ -228,7 +229,7 @@ function spawnPackage(i)
 		return false
 	end
 
-	local pkg = LOADED_PACKAGES[i]
+	local pkg = LOADED_MAP.packages[i]
 	local entity = spawnObjectAtPos(pkg["x"], pkg["y"], pkg["z"]+PACKAGE_PROP_Z_BOOST, pkg["w"], PACKAGE_PROP)
 	if entity then
 		activePackages[i] = entity
@@ -262,7 +263,7 @@ function destroyObject(e)
 end
 
 function collectHP(packageIndex)
-	local pkg = LOADED_PACKAGES[packageIndex]
+	local pkg = LOADED_MAP.packages[packageIndex]
 
 	if not LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg["identifier"]) then
 		table.insert(SESSION_DATA.collectedPackageIDs, pkg["identifier"])
@@ -273,16 +274,13 @@ function collectHP(packageIndex)
 	unmarkPackage(packageIndex)
 	despawnPackage(packageIndex)
 
-	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LEX.tableLen(LOADED_PACKAGES))
+	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LOADED_MAP.amount)
 	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
 	HUDMessage(msg)
 
 	-- got all packages?
-    if (countCollected() == LEX.tableLen(LOADED_PACKAGES)) and (LEX.tableLen(LOADED_PACKAGES) > 0) then
-    	debugMsg("Got all packages")
-    	GameHUD.ShowWarning("All hidden packages collected!")
-    	--GameHUD.ShowWarning("All packages from the \'" .. mapProperties(MOD_SETTINGS.MapPath)["display_name"] .. "\' map has been collected!")
-    	--showShard("All Hidden Packages Collected!", "You have collected all packages from the \'" .. mapProperties(MOD_SETTINGS.MapPath)["display_name"] .. "\' map!")
+    if (countCollected() == LOADED_MAP.amount) and (LOADED_MAP.amount > 0) then
+    	GameHUD.ShowWarning("ALL HIDDEN PACKAGES COLLECTED!")
     	rewardAllPackages()
     end
 end
@@ -298,40 +296,13 @@ function reset()
 end
 
 function destroyAllPackageObjects()
-	for k,v in pairs(LOADED_PACKAGES) do
+	if LOADED_MAP == nil then
+		return
+	end
+
+	for k,v in pairs(LOADED_MAP.packages) do
 		despawnPackage(k)
 	end
-end
-
-function readHPLocations(path)
-	local mapIdentifier = mapProperties(path)["identifier"]
-
-	local lines = {}
-	for line in io.lines(path) do
-		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
-			if not LEX.stringStarts(line, "IDENTIFIER:") and not LEX.stringStarts(line,"DISPLAY_NAME:") then
-				lines[#lines + 1] = line
-			end
-		end
-	end
-
-	local packages = {}
-	for k,v in pairs(lines) do
-		local vals = {}
-		for word in string.gmatch(v, '([^ ]+)') do
-			table.insert(vals,word)
-		end
-
-		local hp = {}
-		-- id is based on coordinates so that the order of the lines in the packages file is not important and can be moved around later on
-		hp["identifier"] = mapIdentifier .. ": x=" .. tostring(vals[1]) .. " y=" .. tostring(vals[2]) .. " z=" .. tostring(vals[3]) .. " w=" .. tostring(vals[4])
-		hp["x"] = tonumber(vals[1])
-		hp["y"] = tonumber(vals[2])
-		hp["z"] = tonumber(vals[3])
-		hp["w"] = tonumber(vals[4])
-		table.insert(packages, hp)
-	end
-	return packages
 end
 
 function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/cyberpunk2077/mods/2920)
@@ -361,7 +332,7 @@ function markPackage(i) -- i = package index
 		return false
 	end
 
-	local pkg = LOADED_PACKAGES[i]
+	local pkg = LOADED_MAP.packages[i]
 	local mappin_id = placeMapPin(pkg["x"], pkg["y"], pkg["z"], pkg["w"])
 	if mappin_id then
 		activeMappins[i] = mappin_id
@@ -380,7 +351,10 @@ function unmarkPackage(i)
 end	
 
 function removeAllMappins()
-	for k,v in pairs(LOADED_PACKAGES) do
+	if LOADED_MAP == nil then
+		return
+	end
+	for k,v in pairs(LOADED_MAP.packages) do
 		unmarkPackage(k)
 	end
 end
@@ -390,7 +364,7 @@ function findNearestPackage()
 	local nearestPackage = false
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
-	for k,v in pairs(LOADED_PACKAGES) do
+	for k,v in pairs(LOADED_MAP.packages) do
 		if LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false then
 			
 			local distance = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
@@ -426,13 +400,13 @@ end
 function switchLocationsFile(path)
 	if path == false then -- false == mod disabled
 		reset()
-		LOADED_PACKAGES = {}
+		LOADED_MAP = nil
 		return true
 	end
 
 	if LEX.fileExists(path) then
 		reset()
-		LOADED_PACKAGES = readHPLocations(path)
+		LOADED_MAP = readMap(path)
 		checkIfPlayerNearAnyPackage()
 		return true
 	end
@@ -441,7 +415,7 @@ function switchLocationsFile(path)
 end
 
 function checkIfPlayerNearAnyPackage()
-	if (MOD_SETTINGS.MapPath == false) or (isPaused == true) or (isInGame == false) then
+	if LOADED_MAP == nil or (isPaused == true) or (isInGame == false) then
 		return
 	end
 
@@ -453,34 +427,17 @@ function checkIfPlayerNearAnyPackage()
 		debugMsg("check at " .. tostring(lastCheck))
 	end
 
-	local checkRange = MOD_SETTINGS.SpawnPackageRange
-	if MOD_SETTINGS.HintAudioEnabled and MOD_SETTINGS.HintAudioRange > checkRange then
-		checkRange = MOD_SETTINGS.HintAudioRange
-	end
-
-	distanceToNearestPackage = nil
+	checkThrottle = 1
 	local playerPos = Game.GetPlayer():GetWorldPosition()
-	for k,v in pairs(LOADED_PACKAGES) do
+	for k,v in pairs(LOADED_MAP.packages) do
 		local d = nil
 
-		if math.abs(playerPos["x"] - v["x"]) <= checkRange then
-			if math.abs(playerPos["y"] - v["y"]) <= checkRange then
-				if math.abs(playerPos["z"] - v["z"]) <= checkRange then
+		if math.abs(playerPos["x"] - v["x"]) <= MOD_SETTINGS.SpawnPackageRange then
+			if math.abs(playerPos["y"] - v["y"]) <= MOD_SETTINGS.SpawnPackageRange then
+				if math.abs(playerPos["z"] - v["z"]) <= MOD_SETTINGS.SpawnPackageRange then
 					-- only bother calculating exact distance if we are in the neighborhood
 					d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
 				end
-			end
-		end
-
-		if d ~= nil then
-			if distanceToNearestPackage == nil or d < distanceToNearestPackage then
-				distanceToNearestPackage = d
-			end
-		end
-
-		if MOD_SETTINGS.HintAudioEnabled and d ~= nil and d <= MOD_SETTINGS.HintAudioRange and LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false then
-			if SONAR_PACKAGE == nil or d == distanceToNearestPackage then
-				SONAR_PACKAGE = k
 			end
 		end
 
@@ -488,6 +445,11 @@ function checkIfPlayerNearAnyPackage()
 
 			if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then
 				-- player has not collected package
+				if d < 15 then
+					checkThrottle = 0.1
+				elseif d < 100 then
+					checkThrottle = 0.5
+				end
 
 				if not activePackages[k] then -- package is not already spawned
 					spawnPackage(k)
@@ -495,27 +457,14 @@ function checkIfPlayerNearAnyPackage()
 
 				if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
 					collectHP(k)
-					SONAR_PACKAGE = nil
+					SONAR_PKG = nil
 				end
 
-			else
-				distanceToNearestPackage = nil -- nil here to chill checkThrottle after collecting the package 
 			end
 
 		else -- player is outside of spawning range
 			despawnPackage(k)
 		end
-	end
-
-	if distanceToNearestPackage ~= nil and distanceToNearestPackage <= checkRange then
-		-- adjust checkThrottle based on distance to nearest package
-		checkThrottle = distanceToNearestPackage / 100
-			
-		if checkThrottle < 0.1 then
-			checkThrottle = 0.1
-		end
-	else
-		checkThrottle = 1
 	end
 
 	if MOD_SETTINGS.ShowPerformanceWindow then
@@ -559,7 +508,7 @@ end
 function countCollected()
 	-- cant just check length of collectedPackageIDs as it may include packages from other location files
 	local c = 0
-	for k,v in pairs(LOADED_PACKAGES) do
+	for k,v in pairs(LOADED_MAP.packages) do
 		if LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) then
 			c = c + 1
 		end
@@ -573,7 +522,7 @@ function rewardAllPackages()
 end
 
 function distanceToPackage(i)
-	local pkg = LOADED_PACKAGES[i]
+	local pkg = LOADED_MAP.packages[i]
 	return Vector4.Distance(Game.GetPlayer():GetWorldPosition(), ToVector4{x=pkg["x"], y=pkg["y"], z=pkg["z"], w=pkg["w"]})
 end
 
@@ -612,37 +561,68 @@ function listFilesInFolder(folder)
 	return files
 end
 
-function mapProperties(path)
-	local response = {
+function readMap(path)
+	if not LEX.fileExists(path) then
+		return nil
+	end
+
+	local map = {
 		amount = 0,
 		display_name = "",
-		display_name_with_amount = "()",
+		display_name_with_amount = "",
 		identifier = "",
-		path = path
+		packages = {},
+		filepath = path
 	}
-
-	if not LEX.fileExists(path) then
-		return false
-	end
 
 	for line in io.lines(path) do
 		
 		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
 
 			if LEX.stringStarts(line, "DISPLAY_NAME:") then
-				response.display_name = LEX.trim(string.match(line, ":(.*)"))
+				map.display_name = LEX.trim(string.match(line, ":(.*)"))
+
 			elseif LEX.stringStarts(line, "IDENTIFIER:") then
-				response.identifier = LEX.trim(string.match(line, ":(.*)"))
-			else
-				response.amount = response.amount + 1
+				map.identifier = LEX.trim(string.match(line, ":(.*)"))
+
+			elseif identifier ~= "" then
+				-- regular coordinate
+				
+				local package = {
+					x = nil,
+					y = nil,
+					z = nil,
+					w = nil,
+					identifer = nil
+				}
+
+				local components = {}
+				for c in string.gmatch(line, '([^ ]+)') do
+					table.insert(components,c)
+				end
+
+				package.x = tonumber(components[1])
+				package.y = tonumber(components[2])
+				package.z = tonumber(components[3])
+				package.w = tonumber(components[4])
+				package.identifier = map.identifier .. ": x=" .. tostring(package.x) .. " y=" .. tostring(package.y) .. " z=" .. tostring(package.z) .. " w=" .. tostring(package.w)
+
+				table.insert(map.packages, package)
+
+
 			end
 		end
 
 	end
 
-	response.display_name_with_amount = response.display_name .. " (" .. tostring(response.amount) .. ")"
+	map.display_name_with_amount = map.display_name .. " (" .. tostring(map.amount) .. ")"
+	map.amount = LEX.tableLen(map.packages)
 
-	return response
+	if map.amount == 0 then
+		return nil
+	end
+
+	return map
 end
 
 function showShard(title, text)
@@ -654,10 +634,29 @@ function sonar()
 	if os.clock() < SONAR_NEXT then
 		return
 	end
+
+	if SONAR_PKG == nil then
+
+		local NP = findNearestPackage()
+
+		if NP and distanceToPackage(NP) <= MOD_SETTINGS.HintAudioRange then
+			SONAR_PKG = NP
+		else
+			SONAR_NEXT = os.clock() + 1.5
+			return
+		end
+
+	end
+
+	local d = distanceToPackage(SONAR_PKG)
+	if d > MOD_SETTINGS.HintAudioRange then
+		SONAR_PKG = nil
+		return
+	end
+
 	Game.GetAudioSystem():Play('ui_hacking_access_granted')
 
-	local d = distanceToPackage(SONAR_PACKAGE)
-	local sonarThrottle = (MOD_SETTINGS.HintAudioRange - (MOD_SETTINGS.HintAudioRange - d)) / 100
+	local sonarThrottle = (MOD_SETTINGS.HintAudioRange - (MOD_SETTINGS.HintAudioRange - d)) / 50
 	if sonarThrottle < 0.1 then
 		sonarThrottle = 0.1
 	end
