@@ -101,8 +101,6 @@ registerForEvent('onDraw', function()
 		end
 
 		ImGui.Separator()
-		ImGui.Text("Notes:")
-		ImGui.Text("* Packages aren\'t collected when you have this window open")
 		ImGui.Text("* Created Maps are stored in:\n\t\'.../mods/Hidden Packages (Creation Mode)/Created Maps\'")
 		if ImGui.Button("Close") then
 			showCreationWindow = false
