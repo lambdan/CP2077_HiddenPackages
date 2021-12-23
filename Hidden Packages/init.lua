@@ -607,11 +607,6 @@ function readMap(path)
 	return map
 end
 
-function showShard(title, text)
-	-- from discord/psiberx
-	Game.GetUISystem():QueueEvent(NotifyShardRead.new({ title = title, text = text }))
-end
-
 function sonar()
 	if os.clock() < SONAR_NEXT then
 		return
@@ -631,14 +626,14 @@ function sonar()
 	end
 
 	local d = distanceToPackage(SONAR_PKG)
-	if d > MOD_SETTINGS.HintAudioRange then
+	if d > MOD_SETTINGS.HintAudioRange then -- went outside range
 		SONAR_PKG = nil
 		return
 	end
 
 	Game.GetAudioSystem():Play('ui_hacking_access_granted')
 
-	local sonarThrottle = (MOD_SETTINGS.HintAudioRange - (MOD_SETTINGS.HintAudioRange - d)) / 50
+	local sonarThrottle = (MOD_SETTINGS.HintAudioRange - (MOD_SETTINGS.HintAudioRange - d)) / 100
 	if sonarThrottle < 0.1 then
 		sonarThrottle = 0.1
 	end
