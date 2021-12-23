@@ -42,7 +42,6 @@ local lastCheck = 0
 local checkThrottle = 1
 
 local SONAR_NEXT = 0
-local SONAR_PKG = nil
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
@@ -175,17 +174,16 @@ registerForEvent('onInit', function()
         end
 	end)
 
-    Observe('PlayerPuppet', 'OnAction', function(action) -- any player action
-    	if not isPaused and isInGame then
-    		checkIfPlayerNearAnyPackage()
-    	end
-    end)
-
 end)
 
 registerForEvent('onUpdate', function(delta)
-    if MOD_SETTINGS.HintAudioEnabled and not isPaused and isInGame then
-    	sonar()
+    if LOADED_MAP ~= nil and not isPaused and isInGame then
+    	checkIfPlayerNearAnyPackage()
+
+    	if MOD_SETTINGS.HintAudioEnabled then
+    		sonar()
+    	end
+
     end
 end)
 
@@ -201,11 +199,13 @@ registerForEvent('onDraw', function()
 		ImGui.Text("SESSION_DATA.collected: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)))
 		ImGui.Text("countCollected(): " .. tostring(countCollected()))
 		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
+		
 
-		local NP = findNearestPackageWithinRange(0)
-		if NP then
-			ImGui.Text("Nearest package: " .. tostring(NP) .. " (" .. string.format("%.1f", distanceToPackage(NP)) .. "M)")
-		end
+		-- showing NP at all times has a huge performance impact
+		--local NP = findNearestPackageWithinRange(0)
+		--if NP then
+		--	ImGui.Text("Nearest package: " .. tostring(NP) .. " (" .. string.format("%.1f", distanceToPackage(NP)) .. "M)")
+		--end
 
 		local c = 0 
 		for k,v in pairs(activePackages) do
@@ -367,7 +367,7 @@ function findNearestPackageWithinRange(range) -- 0 = any range
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
 	for k,v in pairs(LOADED_MAP.packages) do
-		if LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false then
+		if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then -- package not collected
 			if range == 0 or math.abs(playerPos["x"] - v["x"]) <= range then
 				if range == 0 or math.abs(playerPos["y"] - v["y"]) <= range then
 					local d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
@@ -375,13 +375,11 @@ function findNearestPackageWithinRange(range) -- 0 = any range
 						nearest = d
 						nearestPackage = k
 					end
-
 				end
 			end
-
 		end
 	end
-
+	
 	return nearestPackage -- returns package index or false
 end
 
@@ -424,7 +422,7 @@ function checkIfPlayerNearAnyPackage()
 		return -- too soon
 	else
 		lastCheck = loopStarted
-		debugMsg("check at " .. tostring(lastCheck))
+		--debugMsg("check at " .. tostring(lastCheck))
 	end
 
 	checkThrottle = 1
@@ -434,10 +432,9 @@ function checkIfPlayerNearAnyPackage()
 
 		if math.abs(playerPos["x"] - v["x"]) <= MOD_SETTINGS.SpawnPackageRange then
 			if math.abs(playerPos["y"] - v["y"]) <= MOD_SETTINGS.SpawnPackageRange then
-				if math.abs(playerPos["z"] - v["z"]) <= MOD_SETTINGS.SpawnPackageRange then
-					-- only bother calculating exact distance if we are in the neighborhood
-					d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
-				end
+				-- only bother calculating exact distance if we are in the neighborhood
+				-- could check for z axis too but makes very little difference in my testing
+				d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
 			end
 		end
 
@@ -445,8 +442,10 @@ function checkIfPlayerNearAnyPackage()
 
 			if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then
 				-- player has not collected package
-				if d < 15 then
+				if d < 10 then
 					checkThrottle = 0.1
+				elseif d < 50 then
+					checkThrottle = 0.25
 				elseif d < 100 then
 					checkThrottle = 0.5
 				end
@@ -457,7 +456,6 @@ function checkIfPlayerNearAnyPackage()
 
 				if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
 					collectHP(k)
-					SONAR_PKG = nil
 				end
 
 			end
@@ -612,22 +610,13 @@ function sonar()
 		return
 	end
 
-	if SONAR_PKG == nil then
-
-		local NP = findNearestPackageWithinRange(MOD_SETTINGS.HintAudioRange)
-
-		if NP then
-			SONAR_PKG = NP
-		else
-			SONAR_NEXT = os.clock() + 1.5
-			return
-		end
-
+	local NP = findNearestPackageWithinRange(MOD_SETTINGS.HintAudioRange)
+	if not NP then
+		return
 	end
 
-	local d = distanceToPackage(SONAR_PKG)
+	local d = distanceToPackage(NP)
 	if d > MOD_SETTINGS.HintAudioRange then -- went outside range
-		SONAR_PKG = nil
 		return
 	end
 
