@@ -424,6 +424,7 @@ function markNearestPackage()
 		removeAllMappins()
 		markPackage(NP)
 		HUDMessage("Nearest Package Marked (" .. string.format("%.f", distanceToPackage(NP)) .. "M away)")
+		Game.GetAudioSystem():Play('ui_jingle_car_call')
 		return true
 	end
 	HUDMessage("No packages available")
@@ -477,10 +478,10 @@ function checkIfPlayerNearAnyPackage()
 						if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
 							collectHP(k)
 							checkThrottle = 1
-						elseif d < 5 then
-							checkThrottle = 0.05
-						elseif d < 30 then
-							checkThrottle = 0.3
+						elseif d < 10 then
+							checkThrottle = 0.1
+						elseif d < 50 then
+							checkThrottle = 0.5
 						end
 
 					else
@@ -497,7 +498,7 @@ function checkIfPlayerNearAnyPackage()
 		end
 	end
 
-	if nearest == nil or nearest > 30 then
+	if nearest == nil or nearest > 50 then
 		checkThrottle = 1
 	end
 
@@ -649,19 +650,16 @@ function sonar()
 
 	local NP = findNearestPackageWithinRange(MOD_SETTINGS.SonarRange)
 	if not NP then
-		return
-	end
-
-	local d = distanceToPackage(NP)
-	if d > MOD_SETTINGS.SonarRange then -- went outside range
+		SONAR_NEXT = os.clock() + 2
 		return
 	end
 
 	Game.GetAudioSystem():Play('ui_hacking_access_granted')
 
+	local d = distanceToPackage(NP)
 	local sonarThrottle = (MOD_SETTINGS.SonarRange - (MOD_SETTINGS.SonarRange - d)) / 100
-	if sonarThrottle < 0.1 then
-		sonarThrottle = 0.1
+	if sonarThrottle < 0.01 then
+		sonarThrottle = 0.01
 	end
 
 	SONAR_NEXT = os.clock() + sonarThrottle
