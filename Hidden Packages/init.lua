@@ -12,7 +12,6 @@ local MAP_DEFAULT = "Maps/packages1.map" -- full path to default map
 
 local MOD_SETTINGS = {
 	DebugMode = false,
-	ShowPerformanceWindow = false,
 	SpawnPackageRange = 100,
 	HintAudioEnabled = false,
 	HintAudioRange = 150,
@@ -44,13 +43,6 @@ local checkThrottle = 1
 
 local SONAR_NEXT = 0
 local SONAR_PKG = nil
-
--- performance stuff
-local loopTimesAvg = {}
-local performanceTextbox1 = "speed/s"
-local performanceTextbox2 = "ms"
-local performanceTextbox3 = "avg"
-
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
@@ -177,16 +169,6 @@ registerForEvent('onUpdate', function(delta)
 end)
 
 registerForEvent('onDraw', function()
-
-	if MOD_SETTINGS.ShowPerformanceWindow then
-		ImGui.Begin("Hidden Packages - Performance")
-		ImGui.Text("loaded map packages: " .. tostring(LOADED_MAP.amount))
-		ImGui.Text(performanceTextbox1)
-		ImGui.Text(performanceTextbox2)
-		ImGui.Text(performanceTextbox3)
-		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
-		ImGui.End()
-	end
 
 	if MOD_SETTINGS.DebugMode then
 		ImGui.Begin("Hidden Packages - Debug")
@@ -462,19 +444,6 @@ function checkIfPlayerNearAnyPackage()
 		else -- player is outside of spawning range
 			despawnPackage(k)
 		end
-	end
-
-	if MOD_SETTINGS.ShowPerformanceWindow then
-		local loopTime = os.clock() - loopStarted
-		
-		table.insert(loopTimesAvg, loopTime)
-		if LEX.tableLen(loopTimesAvg) > 20 then
-			table.remove(loopTimesAvg, 0)
-			performanceTextbox3 = "avg: " .. tostring(LEX.tableAvg(loopTimesAvg)) .. "ms"
-		end
-
-		performanceTextbox1 = "speed: " .. tostring(1/loopTime) .. "/s"
-		performanceTextbox2 = "last loop: " .. tostring(loopTime) .. "ms"
 	end
 
 end
