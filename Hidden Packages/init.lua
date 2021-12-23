@@ -67,18 +67,21 @@ registerForEvent('onInit', function()
 	local nsCurrentMap = 1
 	for k,v in pairs(listFilesInFolder(MAPS_FOLDER)) do
 		if LEX.stringEnds(v, ".map") then
-			local i = LEX.tableLen(mapsPaths) + 1
 			local map_path = MAPS_FOLDER .. "/" .. v
+			local read_map = readMap(map_path)
+
+			if read_map ~= nil then
+				local i = LEX.tableLen(mapsPaths) + 1
+				nsMapsDisplayNames[i] = read_map["display_name"]
+				mapsPaths[i] = map_path
 			
-			nsMapsDisplayNames[i] = readMap(map_path)["display_name"]
-			mapsPaths[i] = map_path
+				if map_path == MAP_DEFAULT then
+					nsDefaultMap = i
+				end
 			
-			if map_path == MAP_DEFAULT then
-				nsDefaultMap = i
-			end
-			
-			if map_path == MOD_SETTINGS.MapPath then
-				nsCurrentMap = i
+				if map_path == MOD_SETTINGS.MapPath then
+					nsCurrentMap = i
+				end
 			end
 		end
 	end
@@ -537,9 +540,9 @@ function readMap(path)
 
 	local map = {
 		amount = 0,
-		display_name = "",
+		display_name = nil,
 		display_name_with_amount = "",
-		identifier = "",
+		identifier = nil,
 		packages = {},
 		filepath = path
 	}
@@ -554,15 +557,15 @@ function readMap(path)
 			elseif LEX.stringStarts(line, "IDENTIFIER:") then
 				map.identifier = LEX.trim(string.match(line, ":(.*)"))
 
-			elseif identifier ~= "" then
-				-- regular coordinate
+			elseif map.identifier ~= nil and map.display_name ~= nil then
+				-- regular coordinates
 				
 				local package = {
 					x = nil,
 					y = nil,
 					z = nil,
 					w = nil,
-					identifer = nil
+					identifier = nil
 				}
 
 				local components = {}
@@ -584,12 +587,12 @@ function readMap(path)
 
 	end
 
-	map.display_name_with_amount = map.display_name .. " (" .. tostring(map.amount) .. ")"
 	map.amount = LEX.tableLen(map.packages)
-
-	if map.amount == 0 then
+	if map.amount == 0 or map.display_name == nil or map.identifier == nil then
 		return nil
 	end
+
+	map.display_name_with_amount = map.display_name .. " (" .. tostring(map.amount) .. ")"
 
 	return map
 end
