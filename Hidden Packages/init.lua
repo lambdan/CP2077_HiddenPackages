@@ -117,7 +117,7 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addSubcategory("/Hidden Packages/Rewards", "Rewards")
 
-		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Money", "Collecting a package gives you (this*packages collected) €$", 0, 10000, 1000, MOD_SETTINGS.MoneyPerPackage, 1000, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Money", "Collecting a package gives you (this*packages collected) money", 0, 10000, 1000, MOD_SETTINGS.MoneyPerPackage, 1000, function(value)
 			MOD_SETTINGS.MoneyPerPackage = value
 			saveSettings()
 		end)
@@ -181,16 +181,17 @@ registerForEvent('onInit', function()
         end
 	end)
 
+	Observe('PlayerPuppet', 'OnAction', function(action)
+		if LOADED_MAP ~= nil and not isPaused and isInGame then
+			checkIfPlayerNearAnyPackage()
+		end
+	end)
+
 end)
 
 registerForEvent('onUpdate', function(delta)
-    if LOADED_MAP ~= nil and not isPaused and isInGame then
-    	checkIfPlayerNearAnyPackage()
-
-    	if MOD_SETTINGS.SonarEnabled then
-    		sonar()
-    	end
-
+    if MOD_SETTINGS.SonarEnabled and LOADED_MAP ~= nil and not isPaused and isInGame then
+    	sonar()
     end
 end)
 
@@ -198,21 +199,13 @@ registerForEvent('onDraw', function()
 
 	if MOD_SETTINGS.DebugMode then
 		ImGui.Begin("Hidden Packages - Debug")
-		ImGui.Text("MOD_SETTINGS.MapPath: " .. tostring(MOD_SETTINGS.MapPath))
-		ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LOADED_MAP.amount))
+		--ImGui.Text("last check:" .. tostring(os.clock() - lastCheck))
 		ImGui.Text("isInGame: " .. tostring(isInGame))
 		ImGui.Text("isPaused: " .. tostring(isPaused))
 		ImGui.Text("NEED_TO_REFRESH: " .. tostring(NEED_TO_REFRESH))
-		ImGui.Text("SESSION_DATA.collected: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)))
-		ImGui.Text("countCollected(): " .. tostring(countCollected()))
 		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
-		
-
-		-- showing NP at all times has a huge performance impact
-		--local NP = findNearestPackageWithinRange(0)
-		--if NP then
-		--	ImGui.Text("Nearest package: " .. tostring(NP) .. " (" .. string.format("%.1f", distanceToPackage(NP)) .. "M)")
-		--end
+		ImGui.Text("MOD_SETTINGS.MapPath: " .. tostring(MOD_SETTINGS.MapPath))
+		ImGui.Text("SESSION_DATA.collected: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)))
 
 		local c = 0 
 		for k,v in pairs(activePackages) do
@@ -230,6 +223,20 @@ registerForEvent('onDraw', function()
 		end
 		ImGui.Text("activeMappins: " .. tostring(c))
 
+		if LOADED_MAP ~= nil then
+			ImGui.Separator()
+			ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LOADED_MAP.amount))
+			ImGui.Text("countCollected(): " .. tostring(countCollected()))
+		end
+		
+		-- showing NP at all times has a huge performance impact
+		--local NP = findNearestPackageWithinRange(0)
+		--if NP then
+		--	ImGui.Text("Nearest package: " .. tostring(NP) .. " (" .. string.format("%.1f", distanceToPackage(NP)) .. "M)")
+		--end
+
+
+		ImGui.Separator()
 		if ImGui.Button("Stop Debugging") then
 			MOD_SETTINGS.DebugMode = false
 		end
@@ -445,54 +452,56 @@ function checkIfPlayerNearAnyPackage()
 		return
 	end
 
-	local loopStarted = os.clock()
-	if (loopStarted - lastCheck) < checkThrottle then
+	if (os.clock() - lastCheck) < checkThrottle then
 		return -- too soon
-	else
-		lastCheck = loopStarted
-		--debugMsg("check at " .. tostring(lastCheck))
 	end
 
-	checkThrottle = 1
+	local nearest = nil
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 	for k,v in pairs(LOADED_MAP.packages) do
-		local d = nil
+		if not (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"])) then -- no point in checking for already collected packages
+			if math.abs(playerPos["x"] - v["x"]) <= MOD_SETTINGS.SpawnPackageRange then
+				if math.abs(playerPos["y"] - v["y"]) <= MOD_SETTINGS.SpawnPackageRange then
+					if math.abs(playerPos["z"] - v["z"]) <= MOD_SETTINGS.SpawnPackageRange then
 
-		if math.abs(playerPos["x"] - v["x"]) <= MOD_SETTINGS.SpawnPackageRange then
-			if math.abs(playerPos["y"] - v["y"]) <= MOD_SETTINGS.SpawnPackageRange then
-				-- only bother calculating exact distance if we are in the neighborhood
-				-- could check for z axis too but makes very little difference in my testing
-				d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
+						if not activePackages[k] then -- package is not already spawned
+							spawnPackage(k)
+						end
+
+						local d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
+
+						if nearest == nil or d < nearest then
+							nearest = d
+						end
+
+						if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
+							collectHP(k)
+							checkThrottle = 1
+						elseif d < 5 then
+							checkThrottle = 0.05
+						elseif d < 30 then
+							checkThrottle = 0.3
+						end
+
+					else
+						despawnPackage(k)
+					end
+				else
+					despawnPackage(k)
+				end
+			else
+				despawnPackage(k)
 			end
-		end
-
-		if d ~= nil and d <= MOD_SETTINGS.SpawnPackageRange then -- player is in spawning range of package
-
-			if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then
-				-- player has not collected package
-				if d < 10 then
-					checkThrottle = 0.1
-				elseif d < 50 then
-					checkThrottle = 0.25
-				elseif d < 100 then
-					checkThrottle = 0.5
-				end
-
-				if not activePackages[k] then -- package is not already spawned
-					spawnPackage(k)
-				end
-
-				if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
-					collectHP(k)
-				end
-
-			end
-
-		else -- player is outside of spawning range
+		else
 			despawnPackage(k)
 		end
 	end
 
+	if nearest == nil or nearest > 30 then
+		checkThrottle = 1
+	end
+
+	lastCheck = os.clock()
 end
 
 
@@ -570,7 +579,7 @@ function listFilesInFolder(folder)
 end
 
 function readMap(path)
-	if not LEX.fileExists(path) then
+	if path == false or not LEX.fileExists(path) then
 		return nil
 	end
 
