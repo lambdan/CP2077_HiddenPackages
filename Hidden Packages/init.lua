@@ -91,7 +91,7 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addSubcategory("/Hidden Packages/Maps", "Maps")
 
-		nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "Maps are stored in \'.../mods/Hidden Packages/Maps\''. If set to None the mod is practically disabled.", nsMapsDisplayNames, nsCurrentMap, nsDefaultMap, function(value)
+		nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "Maps are stored in \'.../mods/Hidden Packages/Maps\''. If set to None the mod is disabled.", nsMapsDisplayNames, nsCurrentMap, nsDefaultMap, function(value)
 			MOD_SETTINGS.MapPath = mapsPaths[value]
 			saveSettings()
 			NEED_TO_REFRESH = true
@@ -104,26 +104,10 @@ registerForEvent('onInit', function()
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Sonar Range", "Sonar starts working when this close to a package", 10, 1000, 10, MOD_SETTINGS.HintAudioRange, 150, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Sonar Range", "Sonar starts working when this close to a package", 50, 500, 50, MOD_SETTINGS.HintAudioRange, 150, function(value)
 			MOD_SETTINGS.HintAudioRange = value
 			saveSettings()
 		end)
-
-		if MOD_SETTINGS.DebugMode then
-
-			nativeSettings.addSubcategory("/Hidden Packages/Debug", "Debug")
-
-			nativeSettings.addSwitch("/Hidden Packages/Debug", "Debug Mode", "", MOD_SETTINGS.DebugMode, true, function(state)
-				MOD_SETTINGS.DebugMode = state
-				saveSettings()
-			end)
-
-			nativeSettings.addRangeInt("/Hidden Packages/Debug", "Spawn Package Range", "", 1, 1000, 100, MOD_SETTINGS.SpawnPackageRange, 100, function(value)
-				MOD_SETTINGS.SpawnPackageRange = value
-				saveSettings()
-			end)
-
-		end
 
 	end
 	-- end NativeSettings
@@ -222,6 +206,11 @@ registerForEvent('onDraw', function()
 			end
 		end
 		ImGui.Text("activeMappins: " .. tostring(c))
+
+		if ImGui.Button("Stop Debugging") then
+			MOD_SETTINGS.DebugMode = false
+		end
+
 		ImGui.End()
 	end
 
@@ -379,7 +368,7 @@ function findNearestPackageWithinRange(range) -- 0 = any range
 			end
 		end
 	end
-	
+
 	return nearestPackage -- returns package index or false
 end
 
@@ -629,5 +618,3 @@ function sonar()
 
 	SONAR_NEXT = os.clock() + sonarThrottle
 end
-
-
