@@ -54,6 +54,11 @@ end)
 
 registerForEvent('onInit', function()
 	loadSettings()
+
+	if LEX.fileExists("DEBUG") then
+		MOD_SETTINGS.DebugMode = true
+	end
+
 	LOADED_MAP = readMap(MOD_SETTINGS.MapPath)
 
 	-- scan Maps folder and generate table suitable for nativeSettings
@@ -95,15 +100,31 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addSubcategory("/Hidden Packages/AudioHints", "Sonar")
 
-		nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Sonar", "Plays a sound when you are near a package in increasing frequency the closer you get to it", MOD_SETTINGS.HintAudioEnabled, false, function(state)
+		nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Sonar", "Play a sound when near a package in increasing frequency the closer you get to it", MOD_SETTINGS.HintAudioEnabled, false, function(state)
 			MOD_SETTINGS.HintAudioEnabled = state
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Sonar Range", "Sonar starts working when you are this close to a package", 10, 1000, 1, MOD_SETTINGS.HintAudioRange, 150, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Sonar Range", "Sonar starts working when this close to a package", 10, 1000, 10, MOD_SETTINGS.HintAudioRange, 150, function(value)
 			MOD_SETTINGS.HintAudioRange = value
 			saveSettings()
 		end)
+
+		if MOD_SETTINGS.DebugMode then
+
+			nativeSettings.addSubcategory("/Hidden Packages/Debug", "Debug")
+
+			nativeSettings.addSwitch("/Hidden Packages/Debug", "Debug Mode", "", MOD_SETTINGS.DebugMode, true, function(state)
+				MOD_SETTINGS.DebugMode = state
+				saveSettings()
+			end)
+
+			nativeSettings.addRangeInt("/Hidden Packages/Debug", "Spawn Package Range", "", 1, 1000, 100, MOD_SETTINGS.SpawnPackageRange, 100, function(value)
+				MOD_SETTINGS.SpawnPackageRange = value
+				saveSettings()
+			end)
+
+		end
 
 	end
 	-- end NativeSettings
@@ -337,19 +358,19 @@ function removeAllMappins()
 end
 
 function findNearestPackageWithinRange(range) -- 0 = any range
+	if not isInGame	or LOADED_MAP == nil then
+		return false
+	end
+
 	local nearest = nil
 	local nearestPackage = false
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
 	for k,v in pairs(LOADED_MAP.packages) do
 		if LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false then
-
-			local d = nil
-
 			if range == 0 or math.abs(playerPos["x"] - v["x"]) <= range then
 				if range == 0 or math.abs(playerPos["y"] - v["y"]) <= range then
-					d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
-
+					local d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
 					if nearest == nil or d < nearest then
 						nearest = d
 						nearestPackage = k
