@@ -10,14 +10,14 @@ local LEX = require("Modules/LuaEX.lua")
 local MAPS_FOLDER = "Maps" -- should NOT end with a /
 local MAP_DEFAULT = "Maps/packages1.map" -- full path to default map
 
-local MOD_SETTINGS = {
+local MOD_SETTINGS = { -- defaults set here
 	DebugMode = false,
 	SpawnPackageRange = 100,
 	SonarEnabled = false,
-	SonarRange = 150,
-	MoneyPerPackage = 1000,
+	SonarRange = 100,
+	MoneyPerPackage = 100, -- these defaults should also be set in the nativesettings lines
 	StreetcredPerPackage = 50,
-	ExpPerPackage = 50,
+	ExpPerPackage = 0,
 	MapPath = MAP_DEFAULT
 }
 
@@ -117,7 +117,7 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addSubcategory("/Hidden Packages/Rewards", "Rewards")
 
-		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Money", "Collecting a package gives you (this*packages collected) money", 0, 10000, 1000, MOD_SETTINGS.MoneyPerPackage, 1000, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Money", "Collecting a package gives you (this*packages collected) money", 0, 10000, 100, MOD_SETTINGS.MoneyPerPackage, 100, function(value)
 			MOD_SETTINGS.MoneyPerPackage = value
 			saveSettings()
 		end)
@@ -127,7 +127,7 @@ registerForEvent('onInit', function()
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "XP", "Collecting a package gives you (this*packages collected) XP", 0, 1000, 50, MOD_SETTINGS.ExpPerPackage, 50, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "XP", "Collecting a package gives you (this*packages collected) XP", 0, 1000, 50, MOD_SETTINGS.ExpPerPackage, 0, function(value)
 			MOD_SETTINGS.ExpPerPackage = value
 			saveSettings()
 		end)
