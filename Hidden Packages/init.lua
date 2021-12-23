@@ -15,6 +15,9 @@ local MOD_SETTINGS = {
 	SpawnPackageRange = 100,
 	HintAudioEnabled = false,
 	HintAudioRange = 150,
+	MoneyPerPackage = 1000,
+	StreetcredPerPackage = 50,
+	ExpPerPackage = 50,
 	MapPath = MAP_DEFAULT
 }
 
@@ -109,6 +112,23 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Sonar Range", "Sonar starts working when this close to a package", 50, 500, 50, MOD_SETTINGS.HintAudioRange, 150, function(value)
 			MOD_SETTINGS.HintAudioRange = value
+			saveSettings()
+		end)
+
+		nativeSettings.addSubcategory("/Hidden Packages/Rewards", "Rewards")
+
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Money", "Collecting a package gives you (this*packages collected) €$", 0, 10000, 1000, MOD_SETTINGS.MoneyPerPackage, 1000, function(value)
+			MOD_SETTINGS.MoneyPerPackage = value
+			saveSettings()
+		end)
+
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Street Cred", "Collecting a package gives you (this*packages collected) Street Cred", 0, 1000, 50, MOD_SETTINGS.StreetcredPerPackage, 50, function(value)
+			MOD_SETTINGS.StreetcredPerPackage = value
+			saveSettings()
+		end)
+
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "XP", "Collecting a package gives you (this*packages collected) XP", 0, 1000, 50, MOD_SETTINGS.ExpPerPackage, 50, function(value)
+			MOD_SETTINGS.ExpPerPackage = value
 			saveSettings()
 		end)
 
@@ -264,14 +284,30 @@ function collectHP(packageIndex)
 	unmarkPackage(packageIndex)
 	despawnPackage(packageIndex)
 
-	local msg = "Hidden Package " .. tostring(countCollected()) .. " of " .. tostring(LOADED_MAP.amount)
+	local collected = countCollected()
+
+	local msg = "Hidden Package " .. tostring(collected) .. " of " .. tostring(LOADED_MAP.amount)
 	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
 	HUDMessage(msg)
 
-	-- got all packages?
-    if (countCollected() == LOADED_MAP.amount) and (LOADED_MAP.amount > 0) then
+	local money_reward = collected * MOD_SETTINGS.MoneyPerPackage
+	if money_reward	> 0 then
+		Game.AddToInventory("Items.money", money_reward)
+	end
+
+	local sc_reward = collected * MOD_SETTINGS.StreetcredPerPackage
+	if sc_reward > 0 then
+		Game.AddExp("StreetCred", sc_reward)
+	end
+
+	local xp_reward = collected * MOD_SETTINGS.ExpPerPackage
+	if xp_reward > 0 then
+		Game.AddExp("Level", xp_reward)
+	end
+
+    if collected == LOADED_MAP.amount then
+    	-- got all packages
     	GameHUD.ShowWarning("ALL HIDDEN PACKAGES COLLECTED!")
-    	Game.AddToInventory("Items.money", 1000000)
     end
 end
 
