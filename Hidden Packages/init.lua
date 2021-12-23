@@ -13,8 +13,8 @@ local MAP_DEFAULT = "Maps/packages1.map" -- full path to default map
 local MOD_SETTINGS = {
 	DebugMode = false,
 	SpawnPackageRange = 100,
-	HintAudioEnabled = false,
-	HintAudioRange = 150,
+	SonarEnabled = false,
+	SonarRange = 150,
 	MoneyPerPackage = 1000,
 	StreetcredPerPackage = 50,
 	ExpPerPackage = 50,
@@ -103,15 +103,15 @@ registerForEvent('onInit', function()
 			NEED_TO_REFRESH = true
 		end)
 
-		nativeSettings.addSubcategory("/Hidden Packages/AudioHints", "Sonar")
+		nativeSettings.addSubcategory("/Hidden Packages/Sonar", "Sonar")
 
-		nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Sonar", "Play a sound when near a package in increasing frequency the closer you get to it", MOD_SETTINGS.HintAudioEnabled, false, function(state)
-			MOD_SETTINGS.HintAudioEnabled = state
+		nativeSettings.addSwitch("/Hidden Packages/Sonar", "Sonar", "Play a sound when near a package in increasing frequency the closer you get to it", MOD_SETTINGS.SonarEnabled, false, function(state)
+			MOD_SETTINGS.SonarEnabled = state
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/AudioHints", "Sonar Range", "Sonar starts working when this close to a package", 50, 500, 50, MOD_SETTINGS.HintAudioRange, 150, function(value)
-			MOD_SETTINGS.HintAudioRange = value
+		nativeSettings.addRangeInt("/Hidden Packages/Sonar", "Sonar Range", "Sonar starts working when this close to a package", 50, 500, 50, MOD_SETTINGS.SonarRange, 150, function(value)
+			MOD_SETTINGS.SonarRange = value
 			saveSettings()
 		end)
 
@@ -187,7 +187,7 @@ registerForEvent('onUpdate', function(delta)
     if LOADED_MAP ~= nil and not isPaused and isInGame then
     	checkIfPlayerNearAnyPackage()
 
-    	if MOD_SETTINGS.HintAudioEnabled then
+    	if MOD_SETTINGS.SonarEnabled then
     		sonar()
     	end
 
@@ -638,19 +638,19 @@ function sonar()
 		return
 	end
 
-	local NP = findNearestPackageWithinRange(MOD_SETTINGS.HintAudioRange)
+	local NP = findNearestPackageWithinRange(MOD_SETTINGS.SonarRange)
 	if not NP then
 		return
 	end
 
 	local d = distanceToPackage(NP)
-	if d > MOD_SETTINGS.HintAudioRange then -- went outside range
+	if d > MOD_SETTINGS.SonarRange then -- went outside range
 		return
 	end
 
 	Game.GetAudioSystem():Play('ui_hacking_access_granted')
 
-	local sonarThrottle = (MOD_SETTINGS.HintAudioRange - (MOD_SETTINGS.HintAudioRange - d)) / 100
+	local sonarThrottle = (MOD_SETTINGS.SonarRange - (MOD_SETTINGS.SonarRange - d)) / 100
 	if sonarThrottle < 0.1 then
 		sonarThrottle = 0.1
 	end
