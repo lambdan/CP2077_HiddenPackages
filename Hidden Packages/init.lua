@@ -87,7 +87,7 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addSubcategory("/Hidden Packages/Maps", "Maps")
 
-		nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "These are stored in \'.../mods/Hidden Packages/Maps\''. If set to None the mod is practically disabled.", nsMapsDisplayNames, nsCurrentMap, nsDefaultMap, function(value)
+		nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "Maps are stored in \'.../mods/Hidden Packages/Maps\''. If set to None the mod is practically disabled.", nsMapsDisplayNames, nsCurrentMap, nsDefaultMap, function(value)
 			MOD_SETTINGS.MapPath = mapsPaths[value]
 			saveSettings()
 			NEED_TO_REFRESH = true
@@ -95,7 +95,7 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addSubcategory("/Hidden Packages/AudioHints", "Sonar")
 
-		nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Sonar", "Plays a sound when you are moving nearby a package in increasing frequency the closer you get to it", MOD_SETTINGS.HintAudioEnabled, false, function(state)
+		nativeSettings.addSwitch("/Hidden Packages/AudioHints", "Sonar", "Plays a sound when you are near a package in increasing frequency the closer you get to it", MOD_SETTINGS.HintAudioEnabled, false, function(state)
 			MOD_SETTINGS.HintAudioEnabled = state
 			saveSettings()
 		end)
@@ -258,7 +258,7 @@ function collectHP(packageIndex)
 	-- got all packages?
     if (countCollected() == LOADED_MAP.amount) and (LOADED_MAP.amount > 0) then
     	GameHUD.ShowWarning("ALL HIDDEN PACKAGES COLLECTED!")
-    	rewardAllPackages()
+    	Game.AddToInventory("Items.money", 1000000)
     end
 end
 
@@ -480,11 +480,6 @@ function countCollected()
 		end
 	end
 	return c
-end
-
-function rewardAllPackages()
-	Game.AddToInventory("Items.money", 1000000)
-	debugMsg("rewardAllPackages() OK")
 end
 
 function distanceToPackage(i)
