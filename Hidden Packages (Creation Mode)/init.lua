@@ -15,9 +15,7 @@ local statusMsg = "Hello, I am statusMsg."
 local MAP_FOLDER = "Created Maps/"
 
 local MOD_SETTINGS = {
-	DebugMode = false,
-	Filepath = "",
-	NearPackageRange = 100
+	Filepath = ""
 }
 
 local activePackages = {}
@@ -59,9 +57,9 @@ end)
 registerForEvent('onInit', function()
 	loadSettings()
 	if LEX.fileExists(MOD_SETTINGS.Filepath) then
-		statusMsg = "Loading last used map: " .. MOD_SETTINGS.Filepath
 		WORKING_MAP = MOD_SETTINGS.Filepath
 		switchLocationsFile(MOD_SETTINGS.Filepath)
+		statusMsg = "Loaded last used map: " .. MOD_SETTINGS.Filepath
 	else
 		statusMsg = "Create or load a map to get started"
 	end
@@ -407,7 +405,7 @@ function checkIfPlayerNearAnyPackage()
 			nearestPackage = k
 		end
 
-		if d ~= nil and d <= MOD_SETTINGS.NearPackageRange then -- player is in spawning range of package
+		if d ~= nil and d <= 100 then -- player is in spawning range of package
 
 			if not activePackages[k] then -- package is not already spawned
 				spawnPackage(k)
@@ -627,6 +625,11 @@ function deleteLocation(filepath, line_to_delete)
 end
 
 function createNewMap(path, displayname)
+	if path == "" then
+		print("HP(CM): no filename provided!")
+		return false
+	end
+
 	if not LEX.stringEnds(path, ".map") then
 		path = path .. ".map"
 	end
@@ -636,15 +639,30 @@ function createNewMap(path, displayname)
 		return false
 	end
 
+	local identifier = "CreationMode" .. tostring(math.random(0,1000000))
+
+	if displayname == "" then
+		print("HP(CM): no name provided, using random identifier instead")
+		displayname = identifier
+	end
+
 	local content = {}
-	table.insert(content, "IDENTIFIER:" .. "CreationMode" .. tostring(math.random(0,1000000)))
+	table.insert(content, "IDENTIFIER:" .. identifier)
 	table.insert(content, "DISPLAY_NAME:" .. displayname)
 
 	local file = io.open(path, "w")
 	file:write(table.concat(content, "\n"))
 	file:close()
-	print("HP(CM): Created new map file:", path)
-	return path
+
+	-- verify file now exists
+	if LEX.fileExists(path) then
+		print("HP(CM): Created new map file:", path)
+		return path
+	else
+		print("HP(CM): something went wrong with saving the map")
+		return false
+	end
+	return false
 end
 
 function listFilesInFolder(folder, ext)
