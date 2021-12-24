@@ -26,6 +26,9 @@ local activePackages = {}
 local activeMappins = {}
 local LOADED_PACKAGES = {}
 
+local TELEPORT_SELECTED = 0
+local TELEPORT_LIST = {}
+
 local Create_NewCreationFile = MOD_SETTINGS.Filename
 local Create_NewLocationComment = ""
 
@@ -54,6 +57,10 @@ registerForEvent('onInit', function()
 		Create_NewLocationComment = getLocationName()
 		print("HP(CM): Observe DistrictManager", getLocationName())
 	end)
+end)
+
+registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
+    reset()
 end)
 
 registerForEvent('onDraw', function()
@@ -103,27 +110,38 @@ registerForEvent('onDraw', function()
 		end
 		ImGui.Separator()
 
-		if ImGui.Button("Mark ALL packages on map") then
+		if ImGui.Button("Mark all\npackages on map") then
 			removeAllMappins()
 			for k,v in pairs(LOADED_PACKAGES) do
 				markPackage(k)
 			end
 		end
-
-		if ImGui.Button("Remove all map pins") then
+		ImGui.SameLine()
+		if ImGui.Button("Remove all\nmap pins") then
 			removeAllMappins()
 		end
 
 		ImGui.Separator()
+		if LEX.tableLen(LOADED_PACKAGES) == 0 then
+			ImGui.Text("No packages loaded")
+		else
+			TELEPORT_SELECTED = ImGui.Combo("Packages", TELEPORT_SELECTED, TELEPORT_LIST, LEX.tableLen(TELEPORT_LIST), 5)
+			if ImGui.Button("Teleport") then
+				local pkg = LOADED_PACKAGES[TELEPORT_SELECTED+1] -- +1 because imgui list index starts at 0, lua tables start at 1
+				print("HP(CM): Teleport to:", pkg["x"], pkg["y"], pkg["z"])
+				Game.TeleportPlayerToPosition(pkg["x"], pkg["y"], pkg["z"])
+			end
+
+		ImGui.Separator()
+		if ImGui.Button("Where Am I?") then
+			statusMsg = "You are here: " .. getLocationName()
+			GameHUD.ShowWarning(statusMsg)
+		end
+
 		ImGui.Text("* Created Maps are stored in:\n\t\'.../mods/Hidden Packages (Creation Mode)/Created Maps\'")
 		if ImGui.Button("Close") then
 			showCreationWindow = false
 			reset()
-		end
-
-		if ImGui.Button("Where Am I?") then
-			statusMsg = "You are here: " .. getLocationName()
-			GameHUD.ShowWarning(statusMsg)
 		end
 
 		ImGui.End()
@@ -210,6 +228,7 @@ function readHPLocations(filename)
 		hp["y"] = tonumber(vals[2])
 		hp["z"] = tonumber(vals[3])
 		hp["w"] = tonumber(vals[4])
+		hp["line"] = LEX.trim(v)
 		table.insert(packages, hp)
 	end
 	return packages
@@ -306,6 +325,13 @@ function switchLocationsFile(newFile)
 		reset()
 		MOD_SETTINGS.Filename = newFile
 		LOADED_PACKAGES = readHPLocations(path)
+
+		TELEPORT_LIST = {}
+		for k,v in ipairs(LOADED_PACKAGES) do
+			table.insert(TELEPORT_LIST, tostring(k) .. ": " .. v["line"])
+		end
+		TELEPORT_SELECTED = LEX.tableLen(TELEPORT_LIST) - 1 -- -1 because imgui starts index at 0...
+
 		checkIfPlayerNearAnyPackage()
 
 		statusMsg = LEX.tableLen(LOADED_PACKAGES) .. " pkgs loaded from " .. newFile
