@@ -7,7 +7,7 @@ local GameSession = require("Modules/GameSession.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
-local MAPS_FOLDER = "Maps" -- should NOT end with a /
+local MAPS_FOLDER = "Maps/" -- should end with a /
 local MAP_DEFAULT = "Maps/packages1.map" -- full path to default map
 
 local MOD_SETTINGS = { -- defaults set here
@@ -68,23 +68,19 @@ registerForEvent('onInit', function()
 	local nsMapsDisplayNames = {[1] = "None"}
 	local nsDefaultMap = 1
 	local nsCurrentMap = 1
-	for k,v in pairs(listFilesInFolder(MAPS_FOLDER)) do
-		if LEX.stringEnds(v, ".map") then
-			local map_path = MAPS_FOLDER .. "/" .. v
-			local read_map = readMap(map_path)
+	for k,v in pairs( listFilesInFolder(MAPS_FOLDER, ".map") ) do
+		local map_path = MAPS_FOLDER .. v
+		local read_map = readMap(map_path)
 
-			if read_map ~= nil then
-				local i = LEX.tableLen(mapsPaths) + 1
-				nsMapsDisplayNames[i] = read_map["display_name"]
-				mapsPaths[i] = map_path
-			
-				if map_path == MAP_DEFAULT then
-					nsDefaultMap = i
-				end
-			
-				if map_path == MOD_SETTINGS.MapPath then
-					nsCurrentMap = i
-				end
+		if read_map ~= nil then
+			local i = LEX.tableLen(mapsPaths) + 1
+			nsMapsDisplayNames[i] = read_map["display_name"]
+			mapsPaths[i] = map_path
+			if map_path == MAP_DEFAULT then
+				nsDefaultMap = i
+			end
+			if map_path == MOD_SETTINGS.MapPath then
+				nsCurrentMap = i
 			end
 		end
 	end
@@ -568,12 +564,14 @@ function loadSettings()
 	return true
 end
 
-function listFilesInFolder(folder)
+function listFilesInFolder(folder, ext)
 	local files = {}
 	for k,v in pairs(dir(folder)) do
 		for a,b in pairs(v) do
 			if a == "name" then
-				table.insert(files, b)
+				if LEX.stringEnds(b, ext) then
+					table.insert(files, b)
+				end
 			end
 		end
 	end

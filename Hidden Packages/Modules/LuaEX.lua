@@ -54,4 +54,8 @@ function LEX.trim(s) -- https://gist.github.com/ram-nadella/dd067dfeb3c798299e8d
     return (string.gsub(s, "^%s*(.-)%s*$", "%1"))
 end
 
+function LEX.datetimeNowString()
+    return tostring(os.date("%Y-%m-%d %H:%M:%S"))
+end
+
 return LEX
