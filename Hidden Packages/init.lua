@@ -117,17 +117,17 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addSubcategory("/Hidden Packages/Rewards", "Rewards")
 
-		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Money", "Collecting a package gives you (this*packages collected) money", 0, 10000, 100, MOD_SETTINGS.MoneyPerPackage, 100, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Money", "Collecting a package gives you (this * packages collected) money", 0, 10000, 100, MOD_SETTINGS.MoneyPerPackage, 100, function(value)
 			MOD_SETTINGS.MoneyPerPackage = value
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Street Cred", "Collecting a package gives you (this*packages collected) Street Cred", 0, 1000, 50, MOD_SETTINGS.StreetcredPerPackage, 50, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Street Cred XP", "Collecting a package gives you (this * packages collected) Street Cred XP", 0, 1000, 50, MOD_SETTINGS.StreetcredPerPackage, 50, function(value)
 			MOD_SETTINGS.StreetcredPerPackage = value
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "XP", "Collecting a package gives you (this*packages collected) XP", 0, 1000, 50, MOD_SETTINGS.ExpPerPackage, 0, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Level XP", "Collecting a package gives you (this * packages collected) Level XP", 0, 1000, 50, MOD_SETTINGS.ExpPerPackage, 0, function(value)
 			MOD_SETTINGS.ExpPerPackage = value
 			saveSettings()
 		end)
@@ -461,6 +461,7 @@ function checkIfPlayerNearAnyPackage()
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 	for k,v in pairs(LOADED_MAP.packages) do
 		if not (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"])) then -- no point in checking for already collected packages
+			-- this looks 100% ridiculous but in my testing it is faster than always calculating the Vector4.Distance
 			if math.abs(playerPos["x"] - v["x"]) <= MOD_SETTINGS.SpawnPackageRange then
 				if math.abs(playerPos["y"] - v["y"]) <= MOD_SETTINGS.SpawnPackageRange then
 					if math.abs(playerPos["z"] - v["z"]) <= MOD_SETTINGS.SpawnPackageRange then
@@ -484,16 +485,16 @@ function checkIfPlayerNearAnyPackage()
 							checkThrottle = 0.5
 						end
 
-					else
+					elseif activePackages[k] then
 						despawnPackage(k)
 					end
-				else
+				elseif activePackages[k] then
 					despawnPackage(k)
 				end
-			else
+			elseif activePackages[k] then
 				despawnPackage(k)
 			end
-		else
+		elseif activePackages[k] then
 			despawnPackage(k)
 		end
 	end
