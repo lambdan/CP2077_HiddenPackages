@@ -54,15 +54,6 @@ registerHotkey("hp_toggle_create_window", "Toggle creation window", function()
 	end
 end)
 
-registerForEvent("onOverlayOpen", function()
-	showCreationWindow = true
-end)
-
-registerForEvent("onOverlayClose", function()
-	showCreationWindow = false
-	reset()
-end)
-
 registerForEvent('onInit', function()
 	loadSettings()
 	if LEX.fileExists(MOD_SETTINGS.Filepath) then
