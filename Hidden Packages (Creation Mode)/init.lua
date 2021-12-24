@@ -54,6 +54,15 @@ registerHotkey("hp_toggle_create_window", "Toggle creation window", function()
 	end
 end)
 
+registerForEvent("onOverlayOpen", function()
+	showCreationWindow = true
+end)
+
+registerForEvent("onOverlayClose", function()
+	showCreationWindow = false
+	reset()
+end)
+
 registerForEvent('onInit', function()
 	loadSettings()
 	if LEX.fileExists(MOD_SETTINGS.Filepath) then
@@ -87,11 +96,11 @@ registerForEvent('onDraw', function()
 
 			NewMap_DisplayName = ImGui.InputText("Name", NewMap_DisplayName, 50)
 			if ImGui.IsItemHovered() then
-				ImGui.SetTooltip("Name of your map. This is shown in the settings menu when players pick your map.")
+				ImGui.SetTooltip("Name of your map. This is shown in the settings menu when players pick your map.\nCan be changed later by editting the .map file in a text editor.")
 			end
 
 			if ImGui.Button("Create Map") then
-				local new_map = createNewMap(MAP_FOLDER .. NewMap_Filename, NewMap_DisplayName)
+				local new_map = createNewMap(NewMap_Filename, NewMap_DisplayName)
 				if new_map then
 					statusMsg = "Created new map"
 					
@@ -115,12 +124,12 @@ registerForEvent('onDraw', function()
 			end
 
 			ImGui.Separator()
-			ImGui.Text("Available Maps (" .. MAP_FOLDER .. ")")
+			ImGui.Text("Available Maps")
 			ImGui.SameLine(ImGui.GetWindowWidth()-40)
 			ImGui.Text("(" .. string.format("%.1f", ((LAST_MAPFILE_SCAN+5) - os.clock())) .. ")")
 			ImGui.Indent()
 			if LEX.tableLen(MAPS_AVAILABLE) > 0 then
-				MAPS_AVAILABLE_SELECTED = ImGui.Combo(".map", MAPS_AVAILABLE_SELECTED, MAPS_AVAILABLE, LEX.tableLen(MAPS_AVAILABLE), 5)
+				MAPS_AVAILABLE_SELECTED = ImGui.Combo(".map files", MAPS_AVAILABLE_SELECTED, MAPS_AVAILABLE, LEX.tableLen(MAPS_AVAILABLE), 5)
 				if ImGui.Button("Load .map") then
 					local path = MAP_FOLDER .. MAPS_AVAILABLE[MAPS_AVAILABLE_SELECTED+1]
 					if switchLocationsFile(path) then
@@ -624,11 +633,13 @@ function deleteLocation(filepath, line_to_delete)
 
 end
 
-function createNewMap(path, displayname)
-	if path == "" then
+function createNewMap(filename, displayname)
+	if filename == "" then
 		print("HP(CM): no filename provided!")
 		return false
 	end
+
+	local path = MAP_FOLDER .. filename
 
 	if not LEX.stringEnds(path, ".map") then
 		path = path .. ".map"
@@ -647,8 +658,10 @@ function createNewMap(path, displayname)
 	end
 
 	local content = {}
-	table.insert(content, "IDENTIFIER:" .. identifier)
+	-- also add some help lines
 	table.insert(content, "DISPLAY_NAME:" .. displayname)
+	table.insert(content, "# IDENTIFIER however should not be changed if anyone has already played your .map because it is used to track internally what packages have been collected.")
+	table.insert(content, "IDENTIFIER:" .. identifier)
 
 	local file = io.open(path, "w")
 	file:write(table.concat(content, "\n"))
