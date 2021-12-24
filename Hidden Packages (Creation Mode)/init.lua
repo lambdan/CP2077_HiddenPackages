@@ -4,6 +4,7 @@ local MOD_METADATA = {
 }
 
 
+local GameUI = require('Modules/GameUI.lua')
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
 
@@ -38,6 +39,7 @@ local distanceToNearestPackage = nil
 local LAST_SAVE_CLICK = 0
 
 registerHotkey("hp_toggle_create_window", "Toggle creation window", function()
+	Create_NewLocationComment = getLocationName()
 	showCreationWindow = not showCreationWindow
 	if showCreationWindow == false then
 		reset()
@@ -47,6 +49,10 @@ end)
 registerForEvent('onInit', function()
 	loadSettings()
 	switchLocationsFile(MOD_SETTINGS.Filename)
+
+	Observe('DistrictManager', 'NotifySystem', function()
+		Create_NewLocationComment = getLocationName()
+	end)
 end)
 
 registerForEvent('onDraw', function()
@@ -79,7 +85,7 @@ registerForEvent('onDraw', function()
 				if appendLocationToFile(Create_NewCreationFile, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
 					HUDMessage("Location saved!")
 					statusMsg = "Location saved. Apply to test it."
-					Create_NewLocationComment = ""
+					Create_NewLocationComment = getLocationName()
 					MOD_SETTINGS.Filename = Create_NewCreationFile
 					saveSettings()
 					LAST_SAVE_CLICK = os.clock()
@@ -112,6 +118,11 @@ registerForEvent('onDraw', function()
 		if ImGui.Button("Close") then
 			showCreationWindow = false
 			reset()
+		end
+
+		if ImGui.Button("Where Am I?") then
+			statusMsg = "You are here: " .. getLocationName()
+			GameHUD.ShowWarning(statusMsg)
 		end
 
 		ImGui.End()
@@ -412,4 +423,27 @@ function placeMapPin(x,y,z,w) -- from CET Snippets discord
 	mappinData.visibleThroughWalls = true   
 
 	return Game.GetMappinSystem():RegisterMappin(mappinData, ToVector4{x=x, y=y, z=z, w=w} ) -- returns ID
+end
+
+function getLocationName()
+	-- this but we dont care about gangs: https://github.com/psiberx/cp2077-cet-kit/blob/main/mods/GameUI-WhereAmI/init.lua
+	-- <3 psiberx
+	local preventionSystem = Game.GetScriptableSystemsContainer():Get('PreventionSystem')
+	local districtManager = preventionSystem.districtManager
+
+	if districtManager and districtManager:GetCurrentDistrict() then
+		local t = {}
+		local district_id = districtManager:GetCurrentDistrict():GetDistrictID()
+		local tweakDb = GetSingleton('gamedataTweakDBInterface')
+		local districtRecord = tweakDb:GetDistrictRecord(district_id)
+
+		repeat
+			local districtLabel = Game.GetLocalizedText(districtRecord:LocalizedName())
+			table.insert(t, 1, districtLabel)
+			districtRecord = districtRecord:ParentDistrict()
+		until districtRecord == nil
+		
+		return table.concat(t, '/')
+	end
+	return "?"
 end
