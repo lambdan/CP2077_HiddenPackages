@@ -4,11 +4,12 @@
 # So if you just add more points to a map, you should keep it the same. If you're making a whole new map, you should change it.
 # If you want a user to have to collect all packages all over again you should switch it too.
 
+# This maps identifier is packages1 because the original map included with 1.0 was called "packages1" and thus that was used as its internal identifier. 
+# As this is just an evolution of that map (100 packages added) we keep the same identifier so that people who played with the 1.0 dont have to collect all packages all over again
 IDENTIFIER:packages1
 
 # DISPLAY_NAME is what will be shown in the settings UI. It can be pretty.
-
-DISPLAY_NAME:Included Packages (aka packages1)
+DISPLAY_NAME:Included Map (aka packages1)
 
 # Now for the coordinates, they're in this format:
 # X Y Z W (space separated)
@@ -126,7 +127,6 @@ DISPLAY_NAME:Included Packages (aka packages1)
 -2106.748 3616.809 14.185 1
 -1912.607 3943.249 7.015 1
 -1630.642 3085.176 7.118 1
--1397.352 1272.745 127.082 1
 -1273.180 3042.860 7.373 1
 -1122.898 3522.316 33.688 1
 1836.996 2355.456 186.220 1
@@ -180,3 +180,52 @@ DISPLAY_NAME:Included Packages (aka packages1)
 -1415.766 1162.317 34.808 1
 
 // 2012-12-21
+
+-2091.698 604.201 4.480 1 // tricky under bridge
+-1332.648 1229.729 17.196 1
+-1175.074 1323.508 20.000 1 // underneath stairs no tell motel
+-1153.807 1503.937 30.698 1
+-229.040 400.243 29.306 1
+-237.214 559.483 74.682 1 // car wreck
+-252.768 969.948 65.300 1
+-457.066 940.031 64.940 1
+-642.563 1193.641 28.607 1
+1930.935 -951.150 55.654 1 // garbage out in nowhere
+2410.581 -818.976 66.454 1
+2933.561 -985.262 80.978 1 // rock next to crime camp
+3336.729 -897.597 126.216 1
+3243.760 -2088.156 124.355 1
+
+// adding district to comment was added here (its pretty obvious)
+
+-1713.897 2105.994 27.328 1 // Watson/Northside
+-1025.192 51.194 7.422 1 // City Center/Corpo Plaza between two planters
+-1532.061 -339.550 -10.583 1 // City Center/Corpo Plaza (no ones gonna find this)
+-1723.471 -221.873 -15.202 1 // Heywood/The Glen
+-1782.627 -456.503 -9.715 1 // Heywood/The Glen
+2145.911 259.089 90.630 1 // Badlands/Rocky Ridge on top of tunnel entrance
+1895.881 2.768 59.594 1 // Badlands/Red Peaks panam mission place
+2304.256 2035.305 177.395 1 // Badlands/Rocky Ridge glitchy place?
+4001.122 381.388 116.787 1 // Badlands/Rocky Ridge edge
+4651.570 -745.625 146.520 1 // Badlands/Rocky Ridge
+4919.514 -1637.780 143.124 1 // Badlands/Vasquez Pass
+4356.778 -1464.163 159.056 1 // Badlands/Rocky Ridge fan
+2464.646 -2167.157 196.512 1 // Badlands/Rocky Ridge
+1359.791 -2778.936 205.753 1 // Badlands/Laguna Bend
+1130.397 -3482.561 181.441 1 // Badlands/Laguna Bend
+1259.828 -544.619 35.364 1 // Badlands/Red Peaks rivers place
+-2882.227 -5227.406 69.542 1 // Badlands/Biotechnica Flats
+-1258.165 -2539.130 53.230 1 // Badlands/Biotechnica Flats
+288.758 -2563.976 110.384 1 // Santo Domingo/Rancho Coronado swingy road
+-785.466 3129.681 26.637 1 // Watson/Northside pipes
+-1281.094 2069.758 19.930 1 // Watson/Kabuki
+-1456.694 1945.448 19.532 1 // Watson/Northside
+-1223.675 253.127 -3.378 1 // City Center underneath in tunnel
+-611.394 826.034 20.389 1 // Westbrook/Japantown jigjig street dumpster
+-1271.077 941.200 0.502 1 // Watson/Little China
+-1275.135 1090.038 36.434 1 // Watson/Little China over road
+-878.868 588.171 44.174 1 // Westbrook/Japantown big road
+2552.468 -602.245 87.427 1 // Badlands/Rocky Ridge near cyberpsycho house
+-627.690 1018.130 28.255 1 // Westbrook/Japantown stairs
+-823.858 1160.389 21.118 1 // Westbrook/Japantown
+-468.831 2453.473 52.785 1 // Watson/Northside RED X
