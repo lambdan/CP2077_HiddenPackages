@@ -396,3 +396,13 @@ function markPackage(i) -- i = package index
 	end
 	return false
 end
+
+function placeMapPin(x,y,z,w) -- from CET Snippets discord
+	local mappinData = MappinData.new()
+	mappinData.mappinType = TweakDBID.new('Mappins.DefaultStaticMappin')
+	mappinData.variant = gamedataMappinVariant.CustomPositionVariant 
+	-- more types: https://github.com/WolvenKit/CyberCAT/blob/main/CyberCAT.Core/Enums/Dumped%20Enums/gamedataMappinVariant.cs
+	mappinData.visibleThroughWalls = true   
+
+	return Game.GetMappinSystem():RegisterMappin(mappinData, ToVector4{x=x, y=y, z=z, w=w} ) -- returns ID
+end
