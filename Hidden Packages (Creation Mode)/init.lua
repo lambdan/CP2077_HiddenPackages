@@ -52,6 +52,7 @@ registerForEvent('onInit', function()
 
 	Observe('DistrictManager', 'NotifySystem', function()
 		Create_NewLocationComment = getLocationName()
+		print("HP(CM): Observe DistrictManager", getLocationName())
 	end)
 end)
 
@@ -59,7 +60,7 @@ registerForEvent('onDraw', function()
 	if showCreationWindow then
 		checkIfPlayerNearAnyPackage()
 
-		ImGui.Begin("Hidden Packages - Creation Mode")
+		ImGui.Begin("Hidden Packages (Creation Mode)")
 		ImGui.Text(statusMsg) -- status message
 		ImGui.Separator()
 		
@@ -93,7 +94,7 @@ registerForEvent('onDraw', function()
 					statusMsg = "Error saving location :("
 				end
 			else
-				print("Double click prevented :)")
+				print("HP(CM): Double click prevented :)")
 			end
 		end
 
@@ -181,7 +182,6 @@ end
 
 function readHPLocations(filename)
 	if not LEX.fileExists(filename) then
-		print("readHPLocations: file not found")
 		return {}
 	end
 	
@@ -219,7 +219,7 @@ function appendLocationToFile(filename, x, y, z, w, comment)
 	filename = "Created Maps/" .. filename
 
 	if filename == "" then
-		print("appendLocationToFile: not a valid filename")
+		print("HP(CM): not a valid filename")
 		return false
 	end
 
@@ -233,7 +233,7 @@ function appendLocationToFile(filename, x, y, z, w, comment)
 		file:close()
 	else
 		-- add IDENTIFIER and DISPLAY_NAME if file is new
-		print("Creating new map file " .. filename)
+		print("HP(CM): Creating new map file " .. filename)
 		content = content .. "IDENTIFIER:created_" .. tostring(os.time()) .. "\n"
 		content = content .. "DISPLAY_NAME:Creation Mode " .. datetimeNowString() .. "\n"
 		content = content .. "\n"
@@ -250,7 +250,7 @@ function appendLocationToFile(filename, x, y, z, w, comment)
 	local file = io.open(filename, "w")
 	file:write(content)
 	file:close()
-	print("Appended to", filename, x, y, z, w, comment)
+	print("HP(CM): Appended to", filename, x, y, z, w, comment)
 	return true
 end
 
