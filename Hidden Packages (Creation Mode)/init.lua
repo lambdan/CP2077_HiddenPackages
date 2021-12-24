@@ -35,6 +35,8 @@ local lastCheck = 0
 local checkThrottle = 1
 local distanceToNearestPackage = nil
 
+local LAST_SAVE_CLICK = 0
+
 registerHotkey("hp_toggle_create_window", "Toggle creation window", function()
 	showCreationWindow = not showCreationWindow
 	if showCreationWindow == false then
@@ -73,14 +75,19 @@ registerForEvent('onDraw', function()
 		Create_NewCreationFile = ImGui.InputText("File", Create_NewCreationFile, 50)
 		Create_NewLocationComment = ImGui.InputText("Comment", Create_NewLocationComment, 50)
 		if ImGui.Button("Save This Location ") then
-			if appendLocationToFile(Create_NewCreationFile, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
-				HUDMessage("Location saved!")
-				statusMsg = "Location saved. Apply to test it."
-				Create_NewLocationComment = ""
-				MOD_SETTINGS.Filename = Create_NewCreationFile
-				saveSettings()
+			if os.clock() > (LAST_SAVE_CLICK + 2) then
+				if appendLocationToFile(Create_NewCreationFile, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
+					HUDMessage("Location saved!")
+					statusMsg = "Location saved. Apply to test it."
+					Create_NewLocationComment = ""
+					MOD_SETTINGS.Filename = Create_NewCreationFile
+					saveSettings()
+					LAST_SAVE_CLICK = os.clock()
+				else
+					statusMsg = "Error saving location :("
+				end
 			else
-				statusMsg = "Error saving location :("
+				print("Double click prevented :)")
 			end
 		end
 
