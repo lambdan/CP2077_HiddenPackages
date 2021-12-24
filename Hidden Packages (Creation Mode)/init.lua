@@ -659,6 +659,7 @@ function createNewMap(filename, displayname)
 
 	local content = {}
 	-- also add some help lines
+	table.insert(content, "# DISPLAY_NAME can safely be changed. It is shown in the settings menu when picking your map.")
 	table.insert(content, "DISPLAY_NAME:" .. displayname)
 	table.insert(content, "# IDENTIFIER however should not be changed if anyone has already played your .map because it is used to track internally what packages have been collected.")
 	table.insert(content, "IDENTIFIER:" .. identifier)
