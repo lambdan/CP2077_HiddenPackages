@@ -3,7 +3,6 @@ local MOD_METADATA = {
 	version = "1.0.0"
 }
 
-
 local GameUI = require('Modules/GameUI.lua')
 local GameHUD = require("Modules/GameHUD.lua")
 local LEX = require("Modules/LuaEX.lua")
@@ -15,21 +14,29 @@ local HUDMessage_Current = ""
 local HUDMessage_Last = 0
 local statusMsg = "Hello, I am statusMsg."
 
+local MAP_FOLDER = "Created Maps/"
 
 local MOD_SETTINGS = {
 	DebugMode = false,
-	Filepath = "Created Maps/CREATE.map",
+	Filepath = "",
 	NearPackageRange = 100
 }
 
 local activePackages = {}
 local activeMappins = {}
 local LOADED_PACKAGES = {}
+local WORKING_MAP = nil
 
 local PACKAGE_SELECTED = 0
 local PACKAGE_LIST = {}
 
-local Create_NewCreationFile = MOD_SETTINGS.Filepath
+local MAPS_AVAILABLE_SELECTED = 0
+local MAPS_AVAILABLE = {}
+local LAST_MAPFILE_SCAN = 0
+
+local NewMap_Filename = ""
+local NewMap_Identifier = ""
+local NewMap_DisplayName = ""
 local Create_NewLocationComment = ""
 
 local PACKAGE_PROP = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent"
@@ -41,8 +48,11 @@ local distanceToNearestPackage = nil
 
 local LAST_SAVE_CLICK = 0
 
+local inGame = false
+local isPaused = false
+
+
 registerHotkey("hp_toggle_create_window", "Toggle creation window", function()
-	Create_NewLocationComment = getLocationName()
 	showCreationWindow = not showCreationWindow
 	if showCreationWindow == false then
 		reset()
@@ -51,12 +61,13 @@ end)
 
 registerForEvent('onInit', function()
 	loadSettings()
-	switchLocationsFile(MOD_SETTINGS.Filepath)
-
-	Observe('DistrictManager', 'NotifySystem', function()
-		Create_NewLocationComment = getLocationName()
-		print("HP(CM): Observe DistrictManager", getLocationName())
-	end)
+	if LEX.fileExists(MOD_SETTINGS.Filepath) then
+		statusMsg = "Loading last used map"
+		WORKING_MAP = MOD_SETTINGS.Filepath
+		switchLocationsFile(MOD_SETTINGS.Filepath)
+	else
+		statusMsg = "Create or load a map to get started"
+	end
 end)
 
 registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
@@ -71,85 +82,152 @@ registerForEvent('onDraw', function()
 		ImGui.Text(statusMsg) -- status message
 		ImGui.Separator()
 		
-		local position = Game.GetPlayer():GetWorldPosition()
-		ImGui.Text("Player Position:")
-		ImGui.Text("X: " .. string.format("%.3f", position["x"]))
-		ImGui.SameLine()
-		ImGui.Text("\tY: " .. string.format("%.3f", position["y"]))
-
-		ImGui.Text("Z: " .. string.format("%.3f", position["z"]))
-		ImGui.SameLine()
-		ImGui.Text("\tW: " .. tostring(position["w"]))
-
-		if LEX.tableLen(LOADED_PACKAGES) > 0 then
-			ImGui.Text("Nearest package: " .. string.format("%.1f", distanceToNearestPackage) .. "M away")
-		end
-
-		ImGui.Separator()
-		Create_NewCreationFile = ImGui.InputText("File", Create_NewCreationFile, 50)
-		Create_NewLocationComment = ImGui.InputText("Comment", Create_NewLocationComment, 50)
-		if ImGui.Button("Append location") then
-			if os.clock() > (LAST_SAVE_CLICK + 2) then
-				if appendLocationToFile(Create_NewCreationFile, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
-					HUDMessage("Location saved!")
-					statusMsg = "Location saved. Apply to test it."
-					Create_NewLocationComment = getLocationName()
-					MOD_SETTINGS.Filepath = Create_NewCreationFile
+		if WORKING_MAP == nil then
+			ImGui.Text("Create New Map:")
+			NewMap_Filename = ImGui.InputText("New Map Filename", NewMap_Filename, 50)
+			NewMap_Identifier = ImGui.InputText("Identifier", NewMap_Identifier, 50)
+			NewMap_DisplayName = ImGui.InputText("Name", NewMap_DisplayName, 50)
+			if ImGui.Button("Create Map") then
+				if createNewMap(MAP_FOLDER .. NewMap_Filename, NewMap_Identifier, NewMap_DisplayName) then
+					statusMsg = "Created new map"
+					
+					MOD_SETTINGS.Filepath = MAP_FOLDER .. NewMap_Filename
 					saveSettings()
-					LAST_SAVE_CLICK = os.clock()
+
+					WORKING_MAP = MAP_FOLDER .. NewMap_Filename
+					switchLocationsFile(WORKING_MAP)
+
+					NewMap_Filename = ""
+					NewMap_Identifier = ""
+					NewMap_DisplayName = ""
 				else
-					statusMsg = "Error saving location :("
+					statusMsg = "Error creating new map"
 				end
-			else
-				print("HP(CM): Double click prevented :)")
 			end
-		end
 
-		if ImGui.Button("Apply (Reloads map)") then
-			switchLocationsFile(Create_NewCreationFile)
-		end
-		ImGui.Separator()
-
-		if ImGui.Button("Mark all\npackages on map") then
-			removeAllMappins()
-			for k,v in pairs(LOADED_PACKAGES) do
-				markPackage(k)
+			if os.clock() > (LAST_MAPFILE_SCAN + 5) then -- so we dont spam a directory scan
+				MAPS_AVAILABLE = listFilesInFolder(MAP_FOLDER, ".map")
+				LAST_MAPFILE_SCAN = os.clock()
 			end
-		end
-		ImGui.SameLine()
-		if ImGui.Button("Remove all\nmap pins") then
-			removeAllMappins()
-		end
 
-		ImGui.Separator()
-		if LEX.tableLen(LOADED_PACKAGES) == 0 then
-			ImGui.Text("No packages loaded")
+			if LEX.tableLen(MAPS_AVAILABLE) > 0 then
+				ImGui.Separator()
+				ImGui.Text("Available Maps:")
+				MAPS_AVAILABLE_SELECTED = ImGui.Combo(MAP_FOLDER, MAPS_AVAILABLE_SELECTED, MAPS_AVAILABLE, LEX.tableLen(MAPS_AVAILABLE), 5)
+				if ImGui.Button("Load .map") then
+					local path = MAP_FOLDER .. MAPS_AVAILABLE[MAPS_AVAILABLE_SELECTED+1]
+					if switchLocationsFile(path) then
+						statusMsg = "Loaded map " .. MAPS_AVAILABLE[MAPS_AVAILABLE_SELECTED+1]
+						WORKING_MAP = path					
+						MOD_SETTINGS.Filepath = WORKING_MAP
+						saveSettings()
+					end
+				end
+			end
+
+
 		else
-			ImGui.Text("Loaded map: " .. LOADED_PACKAGES[1]["filepath"])
-			PACKAGE_SELECTED = ImGui.Combo("Packages", PACKAGE_SELECTED, PACKAGE_LIST, LEX.tableLen(PACKAGE_LIST), 5)
-			if ImGui.Button("Teleport") then
-				local pkg = LOADED_PACKAGES[PACKAGE_SELECTED+1] -- +1 because imgui list index starts at 0, lua tables start at 1
-				print("HP(CM): Teleport to:", pkg["x"], pkg["y"], pkg["z"])
-				Game.TeleportPlayerToPosition(pkg["x"], pkg["y"], pkg["z"])
+
+			local position = Game.GetPlayer():GetWorldPosition()
+			ImGui.Text("Player Position:")
+			ImGui.Text("X: " .. string.format("%.3f", position["x"]) .. "\tY: " .. string.format("%.3f", position["y"]) .. "\tZ: " .. string.format("%.3f", position["z"]) .. "\tW: " .. string.format("%.3f", position["w"]))
+
+			if LEX.tableLen(LOADED_PACKAGES) > 0 then
+				ImGui.Text("Nearest package: " .. string.format("%.1f", distanceToNearestPackage) .. " M away")
+			end
+
+			ImGui.Separator()
+			ImGui.Text("Add Location to " .. WORKING_MAP .. ":")
+			Create_NewLocationComment = ImGui.InputText("Comment", Create_NewLocationComment, 50)
+
+			if ImGui.Button("Add district to comment") then
+				if Create_NewLocationComment ~= getLocationName() then
+					if Create_NewLocationComment == "" then
+						Create_NewLocationComment = getLocationName()
+					else
+						Create_NewLocationComment = Create_NewLocationComment .. " " .. getLocationName()
+					end
+				end
+			end
+
+			if ImGui.Button("+ Append location") then
+				if os.clock() > (LAST_SAVE_CLICK + 2) then
+					if appendLocationToFile(WORKING_MAP, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
+						HUDMessage("Location saved!")
+						statusMsg = "Location saved. Apply to test it."
+						MOD_SETTINGS.Filepath = WORKING_MAP
+						saveSettings()
+						LAST_SAVE_CLICK = os.clock()
+					else
+						statusMsg = "Error saving location :("
+					end
+				else
+					print("HP(CM): Double click prevented :)")
+				end
 			end
 			ImGui.SameLine()
-			if ImGui.Button("Delete") then
-				local pkg = LOADED_PACKAGES[PACKAGE_SELECTED+1]
-				if deleteLocation(pkg["filepath"], pkg["line"]) then
-					-- reload the file again
-					print("HP(CM): deleted location")
-					switchLocationsFile(pkg["filepath"])
+			if ImGui.Button("Apply/Test (Reloads map)") then
+				switchLocationsFile(WORKING_MAP)
+			end
+			ImGui.Separator()
+
+			ImGui.Text("Map Pins:")
+			if ImGui.Button("Mark all packages") then
+				removeAllMappins()
+				for k,v in pairs(LOADED_PACKAGES) do
+					markPackage(k)
 				end
 			end
+			ImGui.SameLine()
+			if ImGui.Button("Remove all") then
+				removeAllMappins()
+			end
+
+			ImGui.Separator()
+			if LEX.tableLen(LOADED_PACKAGES) == 0 then
+				ImGui.Text("No packages loaded")
+			else
+				ImGui.Text("Loaded map: " .. WORKING_MAP)
+				PACKAGE_SELECTED = ImGui.Combo("Packages", PACKAGE_SELECTED, PACKAGE_LIST, LEX.tableLen(PACKAGE_LIST), 5)
+				if ImGui.Button("Teleport") then
+					local pkg = LOADED_PACKAGES[PACKAGE_SELECTED+1] -- +1 because imgui list index starts at 0, lua tables start at 1
+					print("HP(CM): Teleport to:", pkg["x"], pkg["y"], pkg["z"])
+					Game.TeleportPlayerToPosition(pkg["x"], pkg["y"], pkg["z"])
+				end
+				ImGui.SameLine()
+				if ImGui.Button("Delete") then
+					local pkg = LOADED_PACKAGES[PACKAGE_SELECTED+1]
+					if deleteLocation(pkg["filepath"], pkg["line"]) then
+						-- reload the file again
+						print("HP(CM): deleted location")
+						switchLocationsFile(pkg["filepath"])
+					end
+				end
+			end
+
+			ImGui.Separator()
+			if ImGui.Button("Unload Map") then
+				reset()
+				MOD_SETTINGS.Filepath = ""
+				saveSettings()
+				LOADED_PACKAGES = {}
+				WORKING_MAP = nil
+				statusMsg = "Create or load a map to get started!"
+			end
+
 		end
 
 		ImGui.Separator()
+
+		ImGui.Text("* Maps are stored in:\n\t\'.../mods/Hidden Packages (Creation Mode)/Created Maps\'")
+		ImGui.Text("* They must have the .map file extension to be detected here")
+		ImGui.Text("To play them, copy the .map to the regular Hidden Packages mods' Maps folder")
+		
 		if ImGui.Button("Where Am I?") then
 			statusMsg = "You are here: " .. getLocationName()
 			GameHUD.ShowWarning(statusMsg)
-		end
-
-		ImGui.Text("* Created Maps are stored in:\n\t\'.../mods/Hidden Packages (Creation Mode)/Created Maps\'")
+		end		
+		ImGui.SameLine()
 		if ImGui.Button("Close") then
 			showCreationWindow = false
 			reset()
@@ -343,10 +421,12 @@ function switchLocationsFile(path)
 
 		checkIfPlayerNearAnyPackage()
 
-		statusMsg = LEX.tableLen(LOADED_PACKAGES) .. " pkgs loaded from " .. newFile
+		statusMsg = LEX.tableLen(LOADED_PACKAGES) .. " pkgs loaded from " .. path
+
+		WORKING_MAP = path
 		return true
 	else
-		statusMsg = "File " .. newFile .. " did not exist?"
+		statusMsg = path .. " did not exist?"
 		return false
 	end
 end
@@ -512,4 +592,44 @@ function deleteLocation(filepath, line_to_delete)
 		return false
 	end
 
+end
+
+function createNewMap(path, identifier, displayname)
+	if not LEX.stringEnds(path, ".map") then
+		path = path .. ".map"
+	end
+
+	if LEX.fileExists(path) then
+		print("HP(CM): cannot create new map because file already exists!")
+		return false
+	end
+
+	if identifier == "" or displayname == "" then
+		print("HP(CM): invalid identifier or displayname")
+		return false
+	end
+
+	local content = {}
+	table.insert(content, "IDENTIFIER:" .. identifier)
+	table.insert(content, "DISPLAY_NAME:" .. displayname)
+
+	local file = io.open(path, "w")
+	file:write(table.concat(content, "\n"))
+	file:close()
+	print("HP(CM): Created new map file:", path)
+	return true
+end
+
+function listFilesInFolder(folder, ext)
+	local files = {}
+	for k,v in pairs(dir(folder)) do
+		for a,b in pairs(v) do
+			if a == "name" then
+				if LEX.stringEnds(b, ext) then
+					table.insert(files, b)
+				end
+			end
+		end
+	end
+	return files
 end
