@@ -585,51 +585,35 @@ function readMap(path)
 
 	local map = {
 		amount = 0,
-		display_name = nil,
-		display_name_with_amount = "",
-		identifier = nil,
+		display_name = LEX.basename(path),
+		display_name_amount = "",
+		identifier = LEX.basename(path), 
 		packages = {},
 		filepath = path
 	}
 
 	for line in io.lines(path) do
-		
 		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
-
 			if LEX.stringStarts(line, "DISPLAY_NAME:") then
 				map.display_name = LEX.trim(string.match(line, ":(.*)"))
-
 			elseif LEX.stringStarts(line, "IDENTIFIER:") then
 				map.identifier = LEX.trim(string.match(line, ":(.*)"))
-
-			elseif map.identifier ~= nil and map.display_name ~= nil then
+			else
 				-- regular coordinates
-				
-				local package = {
-					x = nil,
-					y = nil,
-					z = nil,
-					w = nil,
-					identifier = nil
-				}
-
 				local components = {}
 				for c in string.gmatch(line, '([^ ]+)') do
 					table.insert(components,c)
 				end
 
-				package.x = tonumber(components[1])
-				package.y = tonumber(components[2])
-				package.z = tonumber(components[3])
-				package.w = tonumber(components[4])
-				package.identifier = map.identifier .. ": x=" .. tostring(package.x) .. " y=" .. tostring(package.y) .. " z=" .. tostring(package.z) .. " w=" .. tostring(package.w)
-
-				table.insert(map.packages, package)
-
-
+				local pkg = {}
+				pkg.x = tonumber(components[1])
+				pkg.y = tonumber(components[2])
+				pkg.z = tonumber(components[3])
+				pkg.w = tonumber(components[4])
+				pkg.identifier = map.identifier .. ": x=" .. tostring(pkg.x) .. " y=" .. tostring(pkg.y) .. " z=" .. tostring(pkg.z) .. " w=" .. tostring(pkg.w)
+				table.insert(map.packages, pkg)
 			end
 		end
-
 	end
 
 	map.amount = LEX.tableLen(map.packages)
@@ -637,7 +621,7 @@ function readMap(path)
 		return nil
 	end
 
-	map.display_name_with_amount = map.display_name .. " (" .. tostring(map.amount) .. ")"
+	map.display_name_amount = map.display_name .. " (" .. tostring(map.amount) .. ")"
 
 	return map
 end

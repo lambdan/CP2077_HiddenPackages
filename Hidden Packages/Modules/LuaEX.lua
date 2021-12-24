@@ -58,4 +58,18 @@ function LEX.datetimeNowString()
     return tostring(os.date("%Y-%m-%d %H:%M:%S"))
 end
 
+function LEX.basename(s)
+    -- this is probably doable through regex but who the hell knows
+    local r = s
+    if s:find("Maps/") then
+        r = s:sub(6)
+    end
+
+    if r:find(".map") then
+        return r:sub(0,-5)
+    else
+        return r
+    end
+end
+
 return LEX
