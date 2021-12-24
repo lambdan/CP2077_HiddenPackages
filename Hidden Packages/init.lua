@@ -14,7 +14,7 @@ local MOD_SETTINGS = { -- defaults set here
 	DebugMode = false,
 	SpawnPackageRange = 100,
 	SonarEnabled = false,
-	SonarRange = 100,
+	SonarRange = 125,
 	MoneyPerPackage = 100, -- these defaults should also be set in the nativesettings lines
 	StreetcredPerPackage = 50,
 	ExpPerPackage = 0,
@@ -106,7 +106,7 @@ registerForEvent('onInit', function()
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/Sonar", "Sonar Range", "Sonar starts working when this close to a package", 50, 500, 50, MOD_SETTINGS.SonarRange, 150, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Sonar", "Sonar Range", "Sonar starts working when this close to a package", 50, 250, 25, MOD_SETTINGS.SonarRange, 125, function(value)
 			MOD_SETTINGS.SonarRange = value
 			saveSettings()
 		end)
