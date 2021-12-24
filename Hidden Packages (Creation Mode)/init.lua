@@ -131,6 +131,7 @@ registerForEvent('onDraw', function()
 				print("HP(CM): Teleport to:", pkg["x"], pkg["y"], pkg["z"])
 				Game.TeleportPlayerToPosition(pkg["x"], pkg["y"], pkg["z"])
 			end
+		end
 
 		ImGui.Separator()
 		if ImGui.Button("Where Am I?") then
