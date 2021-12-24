@@ -640,9 +640,9 @@ function sonar()
 	Game.GetAudioSystem():Play('ui_hacking_access_granted')
 
 	local d = distanceToPackage(NP)
-	local sonarThrottle = (MOD_SETTINGS.SonarRange - (MOD_SETTINGS.SonarRange - d)) / 100
-	if sonarThrottle < 0.01 then
-		sonarThrottle = 0.01
+	local sonarThrottle = (MOD_SETTINGS.SonarRange - (MOD_SETTINGS.SonarRange - d)) / 35
+	if sonarThrottle < 0.1 then
+		sonarThrottle = 0.1
 	end
 
 	SONAR_NEXT = os.clock() + sonarThrottle
