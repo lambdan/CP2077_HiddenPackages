@@ -18,7 +18,7 @@ local statusMsg = "Hello, I am statusMsg."
 
 local MOD_SETTINGS = {
 	DebugMode = false,
-	Filename = "CREATE.map",
+	Filepath = "Created Maps/CREATE.map",
 	NearPackageRange = 100
 }
 
@@ -26,10 +26,10 @@ local activePackages = {}
 local activeMappins = {}
 local LOADED_PACKAGES = {}
 
-local TELEPORT_SELECTED = 0
-local TELEPORT_LIST = {}
+local PACKAGE_SELECTED = 0
+local PACKAGE_LIST = {}
 
-local Create_NewCreationFile = MOD_SETTINGS.Filename
+local Create_NewCreationFile = MOD_SETTINGS.Filepath
 local Create_NewLocationComment = ""
 
 local PACKAGE_PROP = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent"
@@ -51,7 +51,7 @@ end)
 
 registerForEvent('onInit', function()
 	loadSettings()
-	switchLocationsFile(MOD_SETTINGS.Filename)
+	switchLocationsFile(MOD_SETTINGS.Filepath)
 
 	Observe('DistrictManager', 'NotifySystem', function()
 		Create_NewLocationComment = getLocationName()
@@ -88,13 +88,13 @@ registerForEvent('onDraw', function()
 		ImGui.Separator()
 		Create_NewCreationFile = ImGui.InputText("File", Create_NewCreationFile, 50)
 		Create_NewLocationComment = ImGui.InputText("Comment", Create_NewLocationComment, 50)
-		if ImGui.Button("Save This Location ") then
+		if ImGui.Button("Append location") then
 			if os.clock() > (LAST_SAVE_CLICK + 2) then
 				if appendLocationToFile(Create_NewCreationFile, position["x"], position["y"], position["z"], position["w"], Create_NewLocationComment) then
 					HUDMessage("Location saved!")
 					statusMsg = "Location saved. Apply to test it."
 					Create_NewLocationComment = getLocationName()
-					MOD_SETTINGS.Filename = Create_NewCreationFile
+					MOD_SETTINGS.Filepath = Create_NewCreationFile
 					saveSettings()
 					LAST_SAVE_CLICK = os.clock()
 				else
@@ -105,7 +105,7 @@ registerForEvent('onDraw', function()
 			end
 		end
 
-		if ImGui.Button("Apply/Test") then
+		if ImGui.Button("Apply (Reloads map)") then
 			switchLocationsFile(Create_NewCreationFile)
 		end
 		ImGui.Separator()
@@ -125,11 +125,21 @@ registerForEvent('onDraw', function()
 		if LEX.tableLen(LOADED_PACKAGES) == 0 then
 			ImGui.Text("No packages loaded")
 		else
-			TELEPORT_SELECTED = ImGui.Combo("Packages", TELEPORT_SELECTED, TELEPORT_LIST, LEX.tableLen(TELEPORT_LIST), 5)
+			ImGui.Text("Loaded map: " .. LOADED_PACKAGES[1]["filepath"])
+			PACKAGE_SELECTED = ImGui.Combo("Packages", PACKAGE_SELECTED, PACKAGE_LIST, LEX.tableLen(PACKAGE_LIST), 5)
 			if ImGui.Button("Teleport") then
-				local pkg = LOADED_PACKAGES[TELEPORT_SELECTED+1] -- +1 because imgui list index starts at 0, lua tables start at 1
+				local pkg = LOADED_PACKAGES[PACKAGE_SELECTED+1] -- +1 because imgui list index starts at 0, lua tables start at 1
 				print("HP(CM): Teleport to:", pkg["x"], pkg["y"], pkg["z"])
 				Game.TeleportPlayerToPosition(pkg["x"], pkg["y"], pkg["z"])
+			end
+			ImGui.SameLine()
+			if ImGui.Button("Delete") then
+				local pkg = LOADED_PACKAGES[PACKAGE_SELECTED+1]
+				if deleteLocation(pkg["filepath"], pkg["line"]) then
+					-- reload the file again
+					print("HP(CM): deleted location")
+					switchLocationsFile(pkg["filepath"])
+				end
 			end
 		end
 
@@ -199,15 +209,15 @@ function unmarkPackage(i)
     return false
 end	
 
-function readHPLocations(filename)
-	if not LEX.fileExists(filename) then
+function readHPLocations(filepath)
+	if not LEX.fileExists(filepath) then
 		return {}
 	end
 	
-	local mapIdentifier = getMapProperty(filename, "identifier")
+	local mapIdentifier = getMapProperty(filepath, "identifier")
 
 	local lines = {}
-	for line in io.lines(filename) do
+	for line in io.lines(filepath) do
 		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
 			if not LEX.stringStarts(line, "IDENTIFIER:") and not LEX.stringStarts(line,"DISPLAY_NAME:") then
 				lines[#lines + 1] = line
@@ -230,30 +240,29 @@ function readHPLocations(filename)
 		hp["z"] = tonumber(vals[3])
 		hp["w"] = tonumber(vals[4])
 		hp["line"] = LEX.trim(v)
+		hp["filepath"] = filepath
 		table.insert(packages, hp)
 	end
 	return packages
 end
 
-function appendLocationToFile(filename, x, y, z, w, comment)
-	filename = "Created Maps/" .. filename
-
-	if filename == "" then
-		print("HP(CM): not a valid filename")
+function appendLocationToFile(filepath, x, y, z, w, comment)
+	if filepath == "" then
+		print("HP(CM): not a valid path")
 		return false
 	end
 
 	local content = ""
 
 	-- first check if file already exists and read it if so
-	if LEX.fileExists(filename) then
-		local file = io.open(filename,"r")
+	if LEX.fileExists(filepath) then
+		local file = io.open(filepath,"r")
 		content = file:read("*a")
 		content = content .. "\n"
 		file:close()
 	else
 		-- add IDENTIFIER and DISPLAY_NAME if file is new
-		print("HP(CM): Creating new map file " .. filename)
+		print("HP(CM): Creating new map file " .. filepath)
 		content = content .. "IDENTIFIER:created_" .. tostring(os.time()) .. "\n"
 		content = content .. "DISPLAY_NAME:Creation Mode " .. datetimeNowString() .. "\n"
 		content = content .. "\n"
@@ -267,10 +276,10 @@ function appendLocationToFile(filename, x, y, z, w, comment)
 		content = content .. " // " .. comment
 	end
 
-	local file = io.open(filename, "w")
+	local file = io.open(filepath, "w")
 	file:write(content)
 	file:close()
-	print("HP(CM): Appended to", filename, x, y, z, w, comment)
+	print("HP(CM): Appended to", filepath, x, y, z, w, comment)
 	return true
 end
 
@@ -319,19 +328,18 @@ function inVehicle() -- from AdaptiveGraphicsQuality (https://www.nexusmods.com/
 	end
 end
 
-function switchLocationsFile(newFile)
-	local path = "Created Maps/" .. newFile
+function switchLocationsFile(path)
 	if LEX.fileExists(path) then
 
 		reset()
-		MOD_SETTINGS.Filename = newFile
+		MOD_SETTINGS.Filepath = path
 		LOADED_PACKAGES = readHPLocations(path)
 
-		TELEPORT_LIST = {}
+		PACKAGE_LIST = {}
 		for k,v in ipairs(LOADED_PACKAGES) do
-			table.insert(TELEPORT_LIST, tostring(k) .. ": " .. v["line"])
+			table.insert(PACKAGE_LIST, tostring(k) .. ": " .. v["line"])
 		end
-		TELEPORT_SELECTED = LEX.tableLen(TELEPORT_LIST) - 1 -- -1 because imgui starts index at 0...
+		PACKAGE_SELECTED = LEX.tableLen(PACKAGE_LIST) - 1 -- -1 because imgui starts index at 0...
 
 		checkIfPlayerNearAnyPackage()
 
@@ -473,4 +481,35 @@ function getLocationName()
 		return table.concat(t, '/')
 	end
 	return "?"
+end
+
+function deleteLocation(filepath, line_to_delete)
+	if not LEX.fileExists(filepath) then
+		print("HP(CM) delete failed because file doesnt exist?")
+		return false
+	end
+
+	local found_match = false
+
+	local lines = {}
+	for line in io.lines(filepath) do
+		if LEX.trim(line) ~= LEX.trim(line_to_delete) then 
+			-- only insert lines that arent the line we are looking for
+			table.insert(lines, line)
+		else
+			found_match = true -- we found it 
+		end
+	end
+
+	if found_match then
+		-- now save the lines to the same file again
+		local file = io.open(filepath, "w")
+		file:write(table.concat(lines, "\n"))
+		file:close()
+		return true
+	else
+		-- we didnt find it so theres nothing to do
+		return false
+	end
+
 end
