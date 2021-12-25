@@ -283,7 +283,10 @@ end
 function collectHP(packageIndex)
 	local pkg = LOADED_MAP.packages[packageIndex]
 
-	table.insert(SESSION_DATA.collectedPackageIDs, pkg["identifier"])
+	if not LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg["identifier"]) then
+		table.insert(SESSION_DATA.collectedPackageIDs, pkg["identifier"])
+	end
+	
 	unmarkPackage(packageIndex)
 	despawnPackage(packageIndex)
 
