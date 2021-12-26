@@ -10,6 +10,7 @@ local LEX = require("Modules/LuaEX.lua")
 local MAPS_FOLDER = "Maps/" -- should end with a /
 local MAP_DEFAULT = "Maps/packages1.map" -- full path to default map
 
+local SETTINGS_FILE = "SETTINGS.v201.json"
 local MOD_SETTINGS = { -- defaults set here
 	DebugMode = false,
 	SpawnPackageRange = 100,
@@ -558,18 +559,18 @@ end
 
 
 function saveSettings()
-	local file = io.open("SETTINGS.v201.json", "w")
+	local file = io.open(SETTINGS_FILE, "w")
 	local j = json.encode(MOD_SETTINGS)
 	file:write(j)
 	file:close()
 end
 
 function loadSettings()
-	if not LEX.fileExists("SETTINGS.v201.json") then
+	if not LEX.fileExists(SETTINGS_FILE) then
 		return false
 	end
 
-	local file = io.open("SETTINGS.v201.json", "r")
+	local file = io.open(SETTINGS_FILE, "r")
 	local j = json.decode(file:read("*a"))
 	file:close()
 
