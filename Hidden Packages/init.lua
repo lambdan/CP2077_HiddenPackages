@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.0.0"
+	version = "2.0.1"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -15,9 +15,10 @@ local MOD_SETTINGS = { -- defaults set here
 	SpawnPackageRange = 100,
 	SonarEnabled = false,
 	SonarRange = 125,
-	MoneyPerPackage = 100, -- these defaults should also be set in the nativesettings lines
-	StreetcredPerPackage = 50,
-	ExpPerPackage = 0,
+	MoneyPerPackage = 1000, -- these defaults should also be set in the nativesettings lines
+	StreetcredPerPackage = 100,
+	ExpPerPackage = 100,
+	PackageMultiply = false,
 	MapPath = MAP_DEFAULT
 }
 
@@ -113,18 +114,23 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addSubcategory("/Hidden Packages/Rewards", "Rewards")
 
-		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Money", "Collecting a package gives you (this * packages collected) money", 0, 10000, 100, MOD_SETTINGS.MoneyPerPackage, 100, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Money", "Collecting a package rewards you this much money", 0, 5000, 100, MOD_SETTINGS.MoneyPerPackage, 1000, function(value)
 			MOD_SETTINGS.MoneyPerPackage = value
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Street Cred XP", "Collecting a package gives you (this * packages collected) Street Cred XP", 0, 1000, 50, MOD_SETTINGS.StreetcredPerPackage, 50, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "XP", "Collecting a package rewards you this much XP", 0, 300, 10, MOD_SETTINGS.ExpPerPackage, 100, function(value)
+			MOD_SETTINGS.ExpPerPackage = value
+			saveSettings()
+		end)
+
+		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Street Cred", "Collecting a package rewards you this much Street Cred", 0, 300, 10, MOD_SETTINGS.StreetcredPerPackage, 100, function(value)
 			MOD_SETTINGS.StreetcredPerPackage = value
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/Rewards", "Level XP", "Collecting a package gives you (this * packages collected) Level XP", 0, 1000, 50, MOD_SETTINGS.ExpPerPackage, 0, function(value)
-			MOD_SETTINGS.ExpPerPackage = value
+		nativeSettings.addSwitch("/Hidden Packages/Rewards", "Multiply by Packages Collected", "Multiply rewards by how many packages you have collected", MOD_SETTINGS.PackageMultiply, false, function(state)
+			MOD_SETTINGS.PackageMultiply = state
 			saveSettings()
 		end)
 
@@ -296,17 +302,22 @@ function collectHP(packageIndex)
 	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
 	HUDMessage(msg)
 
-	local money_reward = collected * MOD_SETTINGS.MoneyPerPackage
+	local multiplier = 1
+	if MOD_SETTINGS.PackageMultiply then
+		multiplier = collected
+	end
+
+	local money_reward = MOD_SETTINGS.MoneyPerPackage * multiplier
 	if money_reward	> 0 then
 		Game.AddToInventory("Items.money", money_reward)
 	end
 
-	local sc_reward = collected * MOD_SETTINGS.StreetcredPerPackage
+	local sc_reward = MOD_SETTINGS.StreetcredPerPackage * multiplier
 	if sc_reward > 0 then
 		Game.AddExp("StreetCred", sc_reward)
 	end
 
-	local xp_reward = collected * MOD_SETTINGS.ExpPerPackage
+	local xp_reward = MOD_SETTINGS.ExpPerPackage * multiplier
 	if xp_reward > 0 then
 		Game.AddExp("Level", xp_reward)
 	end
@@ -547,18 +558,18 @@ end
 
 
 function saveSettings()
-	local file = io.open("SETTINGS.json", "w")
+	local file = io.open("SETTINGS.v201.json", "w")
 	local j = json.encode(MOD_SETTINGS)
 	file:write(j)
 	file:close()
 end
 
 function loadSettings()
-	if not LEX.fileExists("SETTINGS.json") then
+	if not LEX.fileExists("SETTINGS.v201.json") then
 		return false
 	end
 
-	local file = io.open("SETTINGS.json", "r")
+	local file = io.open("SETTINGS.v201.json", "r")
 	local j = json.decode(file:read("*a"))
 	file:close()
 
