@@ -76,7 +76,7 @@ registerForEvent('onInit', function()
 
 		if read_map ~= nil then
 			local i = LEX.tableLen(mapsPaths) + 1
-			nsMapsDisplayNames[i] = read_map["display_name"]
+			nsMapsDisplayNames[i] = read_map["display_name"] .. " (" .. read_map["amount"] .. " pkgs)"
 			mapsPaths[i] = map_path
 			if map_path == MAP_DEFAULT then
 				nsDefaultMap = i
