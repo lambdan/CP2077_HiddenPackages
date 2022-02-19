@@ -9,7 +9,7 @@
 IDENTIFIER:packages1
 
 # DISPLAY_NAME is what will be shown in the settings UI. It can be pretty.
-DISPLAY_NAME:Included Map (aka packages1)
+DISPLAY_NAME:Default
 
 # Now for the coordinates, they're in this format:
 # X Y Z W (space separated)
