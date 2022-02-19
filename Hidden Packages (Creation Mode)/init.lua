@@ -263,7 +263,8 @@ registerForEvent('onDraw', function()
 		ImGui.Separator()
 		if ImGui.Button("Where Am I?") then
 			statusMsg = "You are here: " .. getLocationName()
-			GameHUD.ShowWarning(statusMsg)
+			--GameHUD.ShowWarning(statusMsg)
+			GameHUD.ShowMessage(statusMsg)
 		end		
 		ImGui.SameLine()
 		if ImGui.Button("Close") then
@@ -412,7 +413,8 @@ function checkIfPlayerNearAnyPackage()
 			end
 
 			if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected?
-				GameHUD.ShowWarning("Touched package " .. tostring(k))
+				--GameHUD.ShowWarning("Touched package " .. tostring(k))
+				GameHUD.ShowMessage("Touched package " .. tostring(k))
 			end
 
 		else -- player is outside of spawning range

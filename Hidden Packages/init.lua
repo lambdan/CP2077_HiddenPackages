@@ -325,7 +325,7 @@ function collectHP(packageIndex)
 
     if collected == LOADED_MAP.amount then
     	-- got all packages
-    	GameHUD.ShowWarning("ALL HIDDEN PACKAGES COLLECTED!")
+    	GameHUD.ShowMessage("ALL HIDDEN PACKAGES COLLECTED!")
     end
 end
 
