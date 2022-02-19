@@ -1,6 +1,6 @@
 local MOD_METADATA = {
 	title = "Hidden Packages (Creation Mode)",
-	version = "1.0.0"
+	version = "1.0.1"
 }
 
 local GameUI = require('Modules/GameUI.lua')
