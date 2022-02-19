@@ -469,7 +469,7 @@ local function removeSessionFile(sessionTimestamp, isTemporary)
 
 	local sessionPath = sessionDataDir .. '/' .. (isTemporary and '!' or '') .. sessionTimestamp .. '.lua'
 
-	os.remove(sessionPath)
+	--os.remove(sessionPath)
 end
 
 local function cleanUpSessionFiles(sessionTimestamps)
@@ -487,9 +487,9 @@ local function cleanUpSessionFiles(sessionTimestamps)
 	for _, sessionFile in pairs(dir(sessionDataDir)) do
 		local sessionTimestamp = sessionFile.name:match('^!?(%d+)%.lua$')
 
-		if sessionTimestamp and not validNames[sessionTimestamp] then
-			os.remove(sessionDataDir .. '/' .. sessionFile.name)
-		end
+		--if sessionTimestamp and not validNames[sessionTimestamp] then
+			--os.remove(sessionDataDir .. '/' .. sessionFile.name)
+		--end
 	end
 end
 
