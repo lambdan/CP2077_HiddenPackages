@@ -1,0 +1,8 @@
+# DISPLAY_NAME can safely be changed. It is shown in the settings menu when picking your map.
+DISPLAY_NAME:1.5 Celebration
+# IDENTIFIER however should not be changed if anyone has already played your .map because it is used to track internally what packages have been collected.
+IDENTIFIER:1.5_Celebration
+-1493.140 2236.337 18.365 1 // Watson/Northside outside apt in dirty corner
+-777.973 981.315 32.210 1 // Westbrook/Japantown top of apt staircase
+-1613.011 368.341 49.200 1 // City Center outside apt
+-1514.145 -972.630 9.035 1 // Heywood/The Glen behind garbage
