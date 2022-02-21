@@ -378,7 +378,7 @@ function collectHP(packageIndex)
     	-- got all packages
     	Game.GetAudioSystem():Play('ui_jingle_quest_success')
     	HUDMessage("ALL HIDDEN PACKAGES COLLECTED!")
-    	showCustomShardPopup("All Hidden Packages collected!", "You have collected all " .. tostring(LOADED_MAP["amount"]) .. " packages from the map \"" .. LOADED_MAP["display_name"] .. "\"!")
+    	--showCustomShardPopup("All Hidden Packages collected!", "You have collected all " .. tostring(LOADED_MAP["amount"]) .. " packages from the map \"" .. LOADED_MAP["display_name"] .. "\"!")
     else
     	-- regular package pickup
     	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
