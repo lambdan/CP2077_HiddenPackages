@@ -9,30 +9,27 @@ local LEX = require("Modules/LuaEX.lua")
 
 local MAPS_FOLDER = "Maps/" -- should end with a /
 local MAP_DEFAULT = "Maps/packages1.map" -- full path to default map
-local SONAR_DEFAULT_SOUND = "ui_hacking_access_granted"
+local SONAR_DEFAULT_SOUND = "ui_elevator_select"
 
 local SONAR_SOUNDS = {
+	"ui_character_customization_navigate",
+	"ui_elevator_select",
+	"ui_focus_mode_zooming_in_step_change",
+	"ui_gui_tab_change",
 	"ui_hacking_access_granted",
-	"gmp_ui_prevention_player_commit_crime",
-	"gmp_ui_prevention_player_marked_psycho",
-	"gmp_ui_prevention_player_reset",
-	"ui_hacking_access_denied",
-	"ui_hacking_close",
-	"ui_jingle_car_call",
-	"ui_jingle_chip_malfunction",
-	"ui_loot_drink",
-	"ui_loot_eat",
-	"ui_loot_rarity_epic",
-	"ui_loot_rarity_legendary",
-	"ui_loot_take_all",
-	"ui_main_menu_cc_confirmation_screen_open",
-	"ui_main_menu_cc_confirmation_screen_close",
+	"ui_hacking_access_panel_close",
+	"ui_hacking_hover",
+	"ui_hacking_press",
+	"ui_hacking_press_fail",
+	"ui_hacking_qh_hover",
+	"ui_menu_attributes_fail",
 	"ui_menu_hover",
-	"ui_menu_item_consumable_generic",
-	"ui_menu_onpress",
-	"ui_menu_perk_level_up"
+	"ui_menu_item_bought",
+	"ui_menu_map_pin_created",
+	"ui_menu_mouse_click",
+	"ui_scanning_Done",
+	"ui_scanning_Stop"
 }
-
 
 local SETTINGS_FILE = "SETTINGS.v2.1.json"
 local MOD_SETTINGS = { -- defaults set here
@@ -371,10 +368,17 @@ function collectHP(packageIndex)
 	despawnPackage(packageIndex)
 
 	local collected = countCollected()
-
-	local msg = "Hidden Package " .. tostring(collected) .. " of " .. tostring(LOADED_MAP.amount)
-	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
-	HUDMessage(msg)
+	
+    if collected == LOADED_MAP.amount then
+    	-- got all packages
+    	Game.GetAudioSystem():Play('ui_jingle_quest_success')
+    	HUDMessage("ALL HIDDEN PACKAGES COLLECTED!")
+    else
+    	-- regular package pickup
+    	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
+    	local msg = "Hidden Package " .. tostring(collected) .. " of " .. tostring(LOADED_MAP.amount)
+    	HUDMessage(msg)
+    end	
 
 	local multiplier = 1
 	if MOD_SETTINGS.PackageMultiply then
@@ -396,10 +400,7 @@ function collectHP(packageIndex)
 		Game.AddExp("Level", xp_reward)
 	end
 
-    if collected == LOADED_MAP.amount then
-    	-- got all packages
-    	GameHUD.ShowMessage("ALL HIDDEN PACKAGES COLLECTED!")
-    end
+
 end
 
 function reset()
