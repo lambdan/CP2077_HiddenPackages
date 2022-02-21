@@ -75,6 +75,11 @@ registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
 end)
 
+registerHotkey("hp_whereami", "Where Am I?", function()
+	local pos = Game.GetPlayer():GetWorldPosition()
+	showCustomShardPopup("Where Am I?", "You are standing here:\nX:  " .. string.format("%.3f",pos["x"]) .. "\nY:  " .. string.format("%.3f",pos["y"]) .. "\nZ:  " .. string.format("%.3f",pos["z"]) .. "\nW:  " .. pos["w"])
+end)
+
 -- registerForEvent("onOverlayOpen", function()
 -- 	print("HP SESSION DATA:")
 -- 	--print(SESSION_DATA)
@@ -373,6 +378,7 @@ function collectHP(packageIndex)
     	-- got all packages
     	Game.GetAudioSystem():Play('ui_jingle_quest_success')
     	HUDMessage("ALL HIDDEN PACKAGES COLLECTED!")
+    	showCustomShardPopup("All Hidden Packages collected!", "You have collected all " .. tostring(LOADED_MAP["amount"]) .. " packages from the map \"" .. LOADED_MAP["display_name"] .. "\"!")
     else
     	-- regular package pickup
     	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
@@ -735,4 +741,11 @@ function sonar()
 	end
 
 	SONAR_NEXT = os.clock() + sonarThrottle
+end
+
+function showCustomShardPopup(titel, text) -- from #cet-snippets @ discord
+    shardUIevent = NotifyShardRead.new()
+    shardUIevent.title = titel
+    shardUIevent.text = text
+    Game.GetUISystem():QueueEvent(shardUIevent)
 end
