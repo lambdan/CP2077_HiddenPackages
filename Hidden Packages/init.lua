@@ -9,13 +9,39 @@ local LEX = require("Modules/LuaEX.lua")
 
 local MAPS_FOLDER = "Maps/" -- should end with a /
 local MAP_DEFAULT = "Maps/packages1.map" -- full path to default map
+local SONAR_DEFAULT_SOUND = "ui_hacking_access_granted"
 
-local SETTINGS_FILE = "SETTINGS.v201.json"
+local SONAR_SOUNDS = {
+	"ui_hacking_access_granted",
+	"gmp_ui_prevention_player_commit_crime",
+	"gmp_ui_prevention_player_marked_psycho",
+	"gmp_ui_prevention_player_reset",
+	"ui_hacking_access_denied",
+	"ui_hacking_close",
+	"ui_jingle_car_call",
+	"ui_jingle_chip_malfunction",
+	"ui_loot_drink",
+	"ui_loot_eat",
+	"ui_loot_rarity_epic",
+	"ui_loot_rarity_legendary",
+	"ui_loot_take_all",
+	"ui_main_menu_cc_confirmation_screen_open",
+	"ui_main_menu_cc_confirmation_screen_close",
+	"ui_menu_hover",
+	"ui_menu_item_consumable_generic",
+	"ui_menu_onpress",
+	"ui_menu_perk_level_up"
+}
+
+
+local SETTINGS_FILE = "SETTINGS.v2.1.json"
 local MOD_SETTINGS = { -- defaults set here
 	DebugMode = false,
 	SpawnPackageRange = 100,
 	SonarEnabled = false,
 	SonarRange = 125,
+	SonarSound = SONAR_DEFAULT_SOUND,
+	SonarMinimumDelay = 0.0,
 	MoneyPerPackage = 1000, -- these defaults should also be set in the nativesettings lines
 	StreetcredPerPackage = 100,
 	ExpPerPackage = 100,
@@ -116,15 +142,45 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addSubcategory("/Hidden Packages/Sonar", "Sonar")
 
-		nativeSettings.addSwitch("/Hidden Packages/Sonar", "Sonar", "Play a sound when near a package in increasing frequency the closer you get to it", MOD_SETTINGS.SonarEnabled, false, function(state)
+		nativeSettings.addSwitch("/Hidden Packages/Sonar", "Sonar Enabled", "Play a sound when near a package in increasing frequency the closer you get to it", MOD_SETTINGS.SonarEnabled, false, function(state)
 			MOD_SETTINGS.SonarEnabled = state
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/Sonar", "Sonar Range", "Sonar starts working when this close to a package", 50, 250, 25, MOD_SETTINGS.SonarRange, 125, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Sonar", "Range", "Sonar starts working when this close to a package", 50, 250, 25, MOD_SETTINGS.SonarRange, 125, function(value)
 			MOD_SETTINGS.SonarRange = value
 			saveSettings()
 		end)
+
+		-- cant be dragged by mouse?
+		nativeSettings.addRangeFloat("/Hidden Packages/Sonar", "Minimum Interval", "Sonar will wait atleast this long before playing a sound again. Value is in seconds.", 0.0, 10.0, 0.5, "%.1f", MOD_SETTINGS.SonarMinimumDelay, 0.0, function(value)
+ 			MOD_SETTINGS.SonarMinimumDelay = value
+ 			saveSettings()
+ 		end)
+		
+		local sonarSoundsCurrent = 1
+		local sonarSoundsDefault = 1
+		local sonarDisplaySounds = {}
+		for k,v in pairs(SONAR_SOUNDS) do
+			sonarDisplaySounds[k] = v
+			if v == MOD_SETTINGS.SonarSound then
+				sonarSoundsCurrent = k
+			end
+			if v == SONAR_DEFAULT_SOUND then
+				sonarSoundsDefault = k
+			end
+		end
+
+		nativeSettings.addSelectorString("/Hidden Packages/Sonar", "Sound Effect", "Sonar ping sound (Some sounds will not be heard while in this menu and/or only works in-game)", sonarDisplaySounds, sonarSoundsCurrent, sonarSoundsDefault, function(value)
+			MOD_SETTINGS.SonarSound = sonarDisplaySounds[value]
+			saveSettings()
+			Game.GetAudioSystem():Play(MOD_SETTINGS.SonarSound)
+		end)
+
+		-- disabled because not all sounds worked in the menu
+		--nativeSettings.addButton("/Hidden Packages/Sonar", "Test Sound", "Play the sound effect to see if you like it. Some sounds only works if you're in-game.", "Test", 45, function()
+ 		--	Game.GetAudioSystem():Play(MOD_SETTINGS.SonarSound)
+ 		--end)
 
 		nativeSettings.addSubcategory("/Hidden Packages/Rewards", "Rewards")
 
@@ -659,7 +715,7 @@ function readMap(path)
 end
 
 function sonar()
-	if os.clock() < SONAR_NEXT then
+	if os.clock() < (SONAR_NEXT + MOD_SETTINGS.SonarMinimumDelay) then
 		return
 	end
 
@@ -669,7 +725,7 @@ function sonar()
 		return
 	end
 
-	Game.GetAudioSystem():Play('ui_hacking_access_granted')
+	Game.GetAudioSystem():Play(MOD_SETTINGS.SonarSound)
 
 	local d = distanceToPackage(NP)
 	local sonarThrottle = (MOD_SETTINGS.SonarRange - (MOD_SETTINGS.SonarRange - d)) / 35
