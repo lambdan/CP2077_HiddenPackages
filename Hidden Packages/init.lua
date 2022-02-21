@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.0.2"
+	version = "2.1"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -52,8 +52,21 @@ registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
 end)
 
+-- registerForEvent("onOverlayOpen", function()
+-- 	print("HP SESSION DATA:")
+-- 	--print(SESSION_DATA)
+-- 	for k,v in pairs(SESSION_DATA) do
+-- 		print(k,v)
+-- 		for k2,v2 in pairs(v) do
+-- 			print(k2,v2)
+-- 		end
+-- 	end
+-- end)
+
 registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
+    GameSession.TrySave()
     reset()
+    --GameSession.TrySave()
 end)
 
 registerForEvent('onInit', function()
@@ -189,6 +202,10 @@ registerForEvent('onInit', function()
 			checkIfPlayerNearAnyPackage()
 		end
 	end)
+
+	GameSession.TryLoad()
+
+
 
 end)
 
