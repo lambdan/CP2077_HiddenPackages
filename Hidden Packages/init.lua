@@ -70,6 +70,7 @@ local lastCheck = 0
 local checkThrottle = 1
 
 local SONAR_NEXT = 0
+local SONAR_LAST = 0 --obviously move this up next to the declaration of SONAR_NEXT
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
@@ -722,25 +723,21 @@ function readMap(path)
 end
 
 function sonar()
-	if os.clock() < (SONAR_NEXT + MOD_SETTINGS.SonarMinimumDelay) then
-		return
-	end
+    local NP = findNearestPackageWithinRange(MOD_SETTINGS.SonarRange)
+    if not NP then
+        --SONAR_NEXT = os.clock() + 2 --maybe add a toggle for this in the options menu? (i personally cant stand it)
+        return
+    end
 
-	local NP = findNearestPackageWithinRange(MOD_SETTINGS.SonarRange)
-	if not NP then
-		SONAR_NEXT = os.clock() + 2
-		return
-	end
+    SONAR_NEXT = SONAR_LAST + math.max((MOD_SETTINGS.SonarRange - (MOD_SETTINGS.SonarRange - distanceToPackage(NP))) / 35, 0.1)
 
-	Game.GetAudioSystem():Play(MOD_SETTINGS.SonarSound)
+    if os.clock() < (SONAR_NEXT + MOD_SETTINGS.SonarMinimumDelay) then
+        return
+    end
 
-	local d = distanceToPackage(NP)
-	local sonarThrottle = (MOD_SETTINGS.SonarRange - (MOD_SETTINGS.SonarRange - d)) / 35
-	if sonarThrottle < 0.1 then
-		sonarThrottle = 0.1
-	end
+    Game.GetAudioSystem():Play(MOD_SETTINGS.SonarSound)
 
-	SONAR_NEXT = os.clock() + sonarThrottle
+    SONAR_LAST = os.clock()
 end
 
 function showCustomShardPopup(titel, text) -- from #cet-snippets @ discord
