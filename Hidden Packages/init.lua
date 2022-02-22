@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.1"
+	version = "2.2"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -31,7 +31,7 @@ local SONAR_SOUNDS = {
 	"ui_scanning_Stop"
 }
 
-local SETTINGS_FILE = "SETTINGS.v2.1.json"
+local SETTINGS_FILE = "SETTINGS.v2.2.json"
 local MOD_SETTINGS = { -- defaults set here
 	DebugMode = false,
 	SpawnPackageRange = 100,
@@ -43,7 +43,11 @@ local MOD_SETTINGS = { -- defaults set here
 	StreetcredPerPackage = 100,
 	ExpPerPackage = 100,
 	PackageMultiply = false,
-	MapPath = MAP_DEFAULT
+	MapPath = MAP_DEFAULT,
+	AutoMarkEnabled = false,
+	AutoMarkRange = 200,
+	AutoMarkSimultaneous = 3,
+	AutoMarkSounds = true
 }
 
 local SESSION_DATA = { -- will persist
@@ -70,10 +74,17 @@ local lastCheck = 0
 local checkThrottle = 1
 
 local SONAR_NEXT = 0
-local SONAR_LAST = 0 --obviously move this up next to the declaration of SONAR_NEXT
+local SONAR_LAST = 0
+local AUTOMARK_LAST_CHECK = 0
+local AUTOMARK_MARKED = {}
+
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
-	markNearestPackage()
+	if MOD_SETTINGS.AutoMarkEnabled and LEX.tableLen(AUTOMARK_MARKED) > 0 then
+		HUDMessage("Button disabled while Auto-Mark is active")
+	else
+		markNearestPackage()
+	end
 end)
 
 registerHotkey("hp_whereami", "Where Am I?", function()
@@ -135,6 +146,8 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addTab("/Hidden Packages", "Hidden Packages")
 
+		-- maps
+
 		nativeSettings.addSubcategory("/Hidden Packages/Maps", "Maps")
 
 		nativeSettings.addSelectorString("/Hidden Packages/Maps", "Map", "Maps are stored in \'.../mods/Hidden Packages/Maps\''. If set to None the mod is disabled.", nsMapsDisplayNames, nsCurrentMap, nsDefaultMap, function(value)
@@ -142,6 +155,33 @@ registerForEvent('onInit', function()
 			saveSettings()
 			NEED_TO_REFRESH = true
 		end)
+
+		-- automark
+
+		nativeSettings.addSubcategory("/Hidden Packages/AutoMark", "Auto-Mark")
+
+		nativeSettings.addSwitch("/Hidden Packages/AutoMark", "Auto-Mark Enabled", "Automatically mark packages you are nearby to make it very easy to find them", MOD_SETTINGS.AutoMarkEnabled, false, function(state)
+			MOD_SETTINGS.AutoMarkEnabled = state
+			saveSettings()
+		end)
+
+		nativeSettings.addRangeInt("/Hidden Packages/AutoMark", "Range", "Range to automatically mark packages", 50, 2000, 50, MOD_SETTINGS.AutoMarkRange, 200, function(value)
+			MOD_SETTINGS.AutoMarkRange = value
+			saveSettings()
+		end)
+
+		nativeSettings.addRangeInt("/Hidden Packages/AutoMark", "Marker Limit", "Limit how many markers to show at once. Set to 0 to have no limit.", 0, 10, 1, MOD_SETTINGS.AutoMarkSimultaneous, 3, function(value)
+			MOD_SETTINGS.AutoMarkSimultaneous = value
+			saveSettings()
+		end)
+
+		nativeSettings.addSwitch("/Hidden Packages/AutoMark", "Sounds", "Play a sound when a package gets in range or when it goes out of range", MOD_SETTINGS.AutoMarkSounds, false, function(state)
+			MOD_SETTINGS.AutoMarkSounds = state
+			saveSettings()
+		end)
+
+
+		-- sonar
 
 		nativeSettings.addSubcategory("/Hidden Packages/Sonar", "Sonar")
 
@@ -184,6 +224,8 @@ registerForEvent('onInit', function()
 		--nativeSettings.addButton("/Hidden Packages/Sonar", "Test Sound", "Play the sound effect to see if you like it. Some sounds only works if you're in-game.", "Test", 45, function()
  		--	Game.GetAudioSystem():Play(MOD_SETTINGS.SonarSound)
  		--end)
+
+ 		-- rewards
 
 		nativeSettings.addSubcategory("/Hidden Packages/Rewards", "Rewards")
 
@@ -254,11 +296,22 @@ registerForEvent('onInit', function()
         	switchLocationsFile(MOD_SETTINGS.MapPath)
         	NEED_TO_REFRESH = false
         end
+
+        if MOD_SETTINGS.AutoMarkEnabled and MOD_SETTINGS.AutoMarkSimultaneous > 0 and LEX.tableLen(AUTOMARK_MARKED) > MOD_SETTINGS.AutoMarkSimultaneous then
+        	while LEX.tableLen(AUTOMARK_MARKED) > MOD_SETTINGS.AutoMarkSimultaneous do
+        		unmarkPackage(AUTOMARK_MARKED[#AUTOMARK_MARKED])
+        		table.remove(AUTOMARK_MARKED, #AUTOMARK_MARKED)
+        	end
+        end
 	end)
 
 	Observe('PlayerPuppet', 'OnAction', function(action)
 		if LOADED_MAP ~= nil and not isPaused and isInGame then
 			checkIfPlayerNearAnyPackage()
+
+			if MOD_SETTINGS.AutoMarkEnabled then
+				AutoMark()
+			end
 		end
 	end)
 
@@ -483,6 +536,39 @@ function removeAllMappins()
 		unmarkPackage(k)
 	end
 end
+
+function findPackagesWithinRange(range) -- 0 = any range
+	if not isInGame	or LOADED_MAP == nil then
+		return false
+	end
+
+	local pkgs = {}
+	local distances = {}
+	local playerPos = Game.GetPlayer():GetWorldPosition()
+
+	for k,v in pairs(LOADED_MAP.packages) do
+		if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then -- package not collected
+			if range == 0 or math.abs(playerPos["x"] - v["x"]) <= range then
+				if range == 0 or math.abs(playerPos["y"] - v["y"]) <= range then
+					local d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
+					if d <= range then
+						table.insert(pkgs,k)
+						table.insert(distances,d)
+					end
+				end
+			end
+		end
+	end
+
+	if LEX.tableLen(pkgs) == 0 then
+		return false -- no packages in range
+	else
+		-- TODO sort them by closest to furthest before we return them (use the distances table!)
+		return pkgs
+	end
+end
+
+
 
 function findNearestPackageWithinRange(range) -- 0 = any range
 	if not isInGame	or LOADED_MAP == nil then
@@ -725,7 +811,6 @@ end
 function sonar()
     local NP = findNearestPackageWithinRange(MOD_SETTINGS.SonarRange)
     if not NP then
-        --SONAR_NEXT = os.clock() + 2 --maybe add a toggle for this in the options menu? (i personally cant stand it)
         return
     end
 
@@ -738,6 +823,41 @@ function sonar()
     Game.GetAudioSystem():Play(MOD_SETTINGS.SonarSound)
 
     SONAR_LAST = os.clock()
+end
+
+function AutoMark()
+	if os.clock() < (AUTOMARK_LAST_CHECK + 1) then -- atleast 1 second delay between checks
+		return
+	end
+
+	local NPS = findPackagesWithinRange(MOD_SETTINGS.AutoMarkRange)
+
+	if NPS then -- there are packages in range
+		for k,v in pairs(NPS) do
+			if not LEX.tableHasValue(AUTOMARK_MARKED,v) and (MOD_SETTINGS.AutoMarkSimultaneous == 0 or LEX.tableLen(AUTOMARK_MARKED) < MOD_SETTINGS.AutoMarkSimultaneous) then
+				markPackage(v)
+				table.insert(AUTOMARK_MARKED,v)
+
+				if MOD_SETTINGS.AutoMarkSounds then
+					Game.GetAudioSystem():Play('ui_hacking_access_granted')
+				end
+			end
+		end
+	end
+
+	for k,v in pairs(AUTOMARK_MARKED) do
+		if distanceToPackage(v) > MOD_SETTINGS.AutoMarkRange then
+			unmarkPackage(v)
+			
+			if MOD_SETTINGS.AutoMarkSounds then
+				Game.GetAudioSystem():Play('ui_hacking_access_denied')
+			end
+			
+			table.remove(AUTOMARK_MARKED,k)
+		end
+	end
+
+	AUTOMARK_LAST_CHECK = os.clock()
 end
 
 function showCustomShardPopup(titel, text) -- from #cet-snippets @ discord
