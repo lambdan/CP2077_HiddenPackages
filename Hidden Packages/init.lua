@@ -810,11 +810,13 @@ end
 
 function sonar()
     local NP = findNearestPackageWithinRange(MOD_SETTINGS.SonarRange)
-    if not NP then
+    if NP then
+        SONAR_NEXT = SONAR_LAST + math.max((MOD_SETTINGS.SonarRange - (MOD_SETTINGS.SonarRange - distanceToPackage(NP))) / 35, 0.1)
+    --elseif MOD_SETTINGS.SonarIdlePing then --obviously this variable doesnt exist yet, so this will always evaluate to false
+    --    SONAR_NEXT = SONAR_LAST + MOD_SETTINGS.SonarRange / 35 --added this bit in the edit, you could always tack a "+ 2" or w/e to the end of that, too
+    else
         return
     end
-
-    SONAR_NEXT = SONAR_LAST + math.max((MOD_SETTINGS.SonarRange - (MOD_SETTINGS.SonarRange - distanceToPackage(NP))) / 35, 0.1)
 
     if os.clock() < (SONAR_NEXT + MOD_SETTINGS.SonarMinimumDelay) then
         return
