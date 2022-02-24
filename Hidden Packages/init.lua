@@ -47,7 +47,8 @@ local MOD_SETTINGS = { -- defaults set here
 	MapPath = MAP_DEFAULT,
 	ScannerEnabled = false,
 	StickyMarkers = 3,
-	ScannerImmersive = false
+	ScannerImmersive = false,
+	RewardRandomItem = false
 }
 
 local SESSION_DATA = { -- will persist
@@ -79,6 +80,8 @@ local SCANNER_MARKERS = {}
 local SCANNER_OPENED = nil
 local SCANNER_NEAREST_PKG = nil
 local SCANNER_SOUND_TICK = 0.0
+
+local ITEMS = {}
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
@@ -240,6 +243,26 @@ registerForEvent('onInit', function()
 		nativeSettings.addSwitch("/Hidden Packages/Rewards", "Multiply by Packages Collected", "Multiply rewards by how many packages you have collected", MOD_SETTINGS.PackageMultiply, false, function(state)
 			MOD_SETTINGS.PackageMultiply = state
 			saveSettings()
+		end)
+
+		nativeSettings.addSwitch("/Hidden Packages/Rewards", "Random Item (EXPERIMENTAL)", "Get a random item from each package", MOD_SETTINGS.RewardRandomItem, false, function(state)
+			-- read item list
+			if state and LEX.fileExists("items.txt") then
+
+				local file = io.open("items.txt", "r")
+				local lines = file:lines()
+				for line in lines do
+					table.insert(ITEMS, line)
+				end
+				file:close()
+
+				MOD_SETTINGS.RewardRandomItem = true
+				saveSettings()
+			else
+				ITEMS = {}
+				MOD_SETTINGS.RewardRandomItem = false
+				saveSettings()
+			end
 		end)
 
 	end
@@ -483,6 +506,11 @@ function collectHP(packageIndex)
 		Game.AddExp("Level", xp_reward)
 	end
 
+	if MOD_SETTINGS.RewardRandomItem then
+		local item = ITEMS[math.random(1,#ITEMS)]
+		Game.AddToInventory(item, 1)
+		HUDMessage("Got Item: " .. item)
+	end
 
 end
 
