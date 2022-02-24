@@ -78,6 +78,7 @@ local SONAR_LAST = 0
 local SCANNER_MARKERS = {}
 local SCANNER_OPENED = nil
 local SCANNER_NEAREST_PKG = nil
+local SCANNER_SOUND_TICK = 0.0
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
@@ -319,6 +320,7 @@ registerForEvent('onInit', function()
 		if MOD_SETTINGS.ScannerEnabled then
 			SCANNER_OPENED = nil
 			SCANNER_NEAREST_PKG = nil
+			SCANNER_SOUND_TICK = 0.0
 
 			if MOD_SETTINGS.StickyMarkers == 0 then
 				for k,v in pairs(SCANNER_MARKERS) do
@@ -866,13 +868,18 @@ function scanner()
 			-- TODO horribly inefficient to do these calculations every tick
 			local distance = distanceToPackage(NP)
 			local delay = (distance / 1000) + 1 -- 1 sec per km + 1 sec always
+			if distance < 25 then
+				delay = delay - 0.8
+			end
 			local wait = SCANNER_OPENED + delay
 			if os.clock() >= wait then
 				markPackage(NP)
 				table.insert(SCANNER_MARKERS, NP)
-				Game.GetAudioSystem():Play("ui_hacking_access_granted") -- should probably be an option
-			elseif wait >= 1.25 and math.random(0,30) == 1 then
+				Game.GetAudioSystem():Play("ui_hacking_access_granted")
+
+			elseif (os.clock() - SCANNER_OPENED) >= math.min(0.5,(distance/100)) and (os.clock() - SCANNER_SOUND_TICK) >= math.max((distance/2000), 0.5) then
 					Game.GetAudioSystem():Play("ui_elevator_select")
+					SCANNER_SOUND_TICK = os.clock()
 			end
 		end
 
