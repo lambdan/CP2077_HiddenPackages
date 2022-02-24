@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.2"
+	version = "2.2-rc"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -201,17 +201,17 @@ registerForEvent('onInit', function()
 
 		nativeSettings.addSubcategory("/Hidden Packages/Scanner", "Scanner Marker")
 
-		nativeSettings.addSwitch("/Hidden Packages/Scanner", "Scanner Marker", "Nearest package will be marked when using the scanner", MOD_SETTINGS.ScannerEnabled, false, function(state)
+		nativeSettings.addSwitch("/Hidden Packages/Scanner", "Scanner Marker", "Nearest package will be marked by using the scanner", MOD_SETTINGS.ScannerEnabled, false, function(state)
 			MOD_SETTINGS.ScannerEnabled = state
 			saveSettings()
 		end)
 
-		nativeSettings.addSwitch("/Hidden Packages/Scanner", "Immersive", "Makes it more Immersive™", MOD_SETTINGS.ScannerImmersive, false, function(state)
+		nativeSettings.addSwitch("/Hidden Packages/Scanner", "Immersive", "Make it more Immersive™", MOD_SETTINGS.ScannerImmersive, false, function(state)
 			MOD_SETTINGS.ScannerImmersive = state
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/Scanner", "Sticky Markers", "Keep up to this many markers active after closing the scanner. If set to 0, markers will only be visible while in the scanner.", 0, 10, 1, MOD_SETTINGS.StickyMarkers, 3, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Scanner", "Sticky Markers", "Keep up to this many packages marked. Markers will disappear after closing the scanner if set to 0.", 0, 10, 1, MOD_SETTINGS.StickyMarkers, 3, function(value)
 			MOD_SETTINGS.StickyMarkers = value
 			saveSettings()
 		end)
