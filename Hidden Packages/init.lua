@@ -45,8 +45,9 @@ local MOD_SETTINGS = { -- defaults set here
 	ExpPerPackage = 100,
 	PackageMultiply = false,
 	MapPath = MAP_DEFAULT,
-	ScannerEnabled = true,
-	StickyMarkers = 3
+	ScannerEnabled = false,
+	StickyMarkers = 3,
+	ScannerImmersive = false
 }
 
 local SESSION_DATA = { -- will persist
@@ -75,6 +76,8 @@ local checkThrottle = 1
 local SONAR_NEXT = 0
 local SONAR_LAST = 0
 local SCANNER_MARKERS = {}
+local SCANNER_OPENED = nil
+local SCANNER_NEAREST_PKG = nil
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
@@ -202,10 +205,17 @@ registerForEvent('onInit', function()
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/Scanner", "Sticky Markers", "Keep up to this many markers active. If set to 0, markers will only be visible while in the scanner.", 0, 10, 1, MOD_SETTINGS.StickyMarkers, 3, function(value)
+		nativeSettings.addSwitch("/Hidden Packages/Scanner", "Immersive", "Makes it more Immersive™", MOD_SETTINGS.ScannerImmersive, false, function(state)
+			MOD_SETTINGS.ScannerImmersive = state
+			saveSettings()
+		end)
+
+		nativeSettings.addRangeInt("/Hidden Packages/Scanner", "Sticky Markers", "Keep up to this many markers active after closing the scanner. If set to 0, markers will only be visible while in the scanner.", 0, 10, 1, MOD_SETTINGS.StickyMarkers, 3, function(value)
 			MOD_SETTINGS.StickyMarkers = value
 			saveSettings()
 		end)
+
+
 
  		-- rewards
 
@@ -279,12 +289,11 @@ registerForEvent('onInit', function()
         	NEED_TO_REFRESH = false
         end
 
-		if MOD_SETTINGS.ScannerEnabled and MOD_SETTINGS.StickyMarkers > 0 then
-			while LEX.tableLen(SCANNER_MARKERS) > MOD_SETTINGS.StickyMarkers do
-				-- remove oldest marker (Lua starts at 1)
-				unmarkPackage(SCANNER_MARKERS[1])
-				table.remove(SCANNER_MARKERS, 1)
-			end
+        -- have to do this here in case user switched settings
+		while LEX.tableLen(SCANNER_MARKERS) > MOD_SETTINGS.StickyMarkers do
+			-- remove oldest marker (Lua starts at 1)
+			unmarkPackage(SCANNER_MARKERS[1])
+			table.remove(SCANNER_MARKERS, 1)
 		end
 
 
@@ -297,27 +306,28 @@ registerForEvent('onInit', function()
 	end)
 
 	GameUI.Listen('ScannerOpen', function()
+		
 		if MOD_SETTINGS.ScannerEnabled then
-			local NP = findNearestPackageWithinRange(0) -- maybe a setting for range here?
-			if NP and not LEX.tableHasValue(SCANNER_MARKERS, NP) then -- found package and its not already marked
-				markPackage(NP)
-				table.insert(SCANNER_MARKERS, NP)
-
-				while LEX.tableLen(SCANNER_MARKERS) > MOD_SETTINGS.StickyMarkers do
-					unmarkPackage(SCANNER_MARKERS[1])
-					table.remove(SCANNER_MARKERS,1)
-				end
-			end
+			SCANNER_OPENED = os.clock()
+			SCANNER_NEAREST_PKG = findNearestPackageWithinRange(0)
 		end
+
 	end)
 
 	GameUI.Listen('ScannerClose', function()
-		if MOD_SETTINGS.ScannerEnabled and MOD_SETTINGS.StickyMarkers == 0 then
-			for k,v in pairs(SCANNER_MARKERS) do
-				unmarkPackage(v)
-				SCANNER_MARKERS[k] = nil
+		
+		if MOD_SETTINGS.ScannerEnabled then
+			SCANNER_OPENED = nil
+			SCANNER_NEAREST_PKG = nil
+
+			if MOD_SETTINGS.StickyMarkers == 0 then
+				for k,v in pairs(SCANNER_MARKERS) do
+					unmarkPackage(v)
+					SCANNER_MARKERS[k] = nil
+				end
 			end
 		end
+
 	end)
 
 	GameSession.TryLoad()
@@ -325,9 +335,17 @@ registerForEvent('onInit', function()
 end)
 
 registerForEvent('onUpdate', function(delta)
-    if MOD_SETTINGS.SonarEnabled and LOADED_MAP ~= nil and not isPaused and isInGame then
-    	sonar()
+    if LOADED_MAP ~= nil and not isPaused and isInGame then
+
+    	if MOD_SETTINGS.SonarEnabled then
+    		sonar()
+    	end
+
+    	if MOD_SETTINGS.ScannerEnabled and SCANNER_OPENED then
+    		scanner()
+    	end
     end
+
 end)
 
 registerForEvent('onDraw', function()
@@ -828,6 +846,45 @@ function sonar()
     Game.GetAudioSystem():Play(MOD_SETTINGS.SonarSound)
 
     SONAR_LAST = os.clock()
+end
+
+function scanner()
+	if not MOD_SETTINGS.ScannerEnabled or SCANNER_OPENED == nil then
+		return
+	end
+
+	local NP = SCANNER_NEAREST_PKG
+
+	if NP and not LEX.tableHasValue(SCANNER_MARKERS, NP) then
+
+		if not MOD_SETTINGS.ScannerImmersive then
+			-- no BS, just mark the package instantly
+			markPackage(NP)
+			table.insert(SCANNER_MARKERS, NP)
+		else
+			-- "immersive": wait a while, especially if the package is far away
+			-- TODO horribly inefficient to do these calculations every tick
+			local distance = distanceToPackage(NP)
+			local delay = (distance / 1000) + 1 -- 1 sec per km + 1 sec always
+			local wait = SCANNER_OPENED + delay
+			if os.clock() >= wait then
+				markPackage(NP)
+				table.insert(SCANNER_MARKERS, NP)
+				Game.GetAudioSystem():Play("ui_hacking_access_granted") -- should probably be an option
+			elseif wait >= 1.25 and math.random(0,30) == 1 then
+					Game.GetAudioSystem():Play("ui_elevator_select")
+			end
+		end
+
+		if MOD_SETTINGS.StickyMarkers > 0 then
+			while LEX.tableLen(SCANNER_MARKERS) > MOD_SETTINGS.StickyMarkers do
+				unmarkPackage(SCANNER_MARKERS[1])
+				table.remove(SCANNER_MARKERS, 1)
+			end
+		end
+
+	end
+		
 end
 
 function showCustomShardPopup(titel, text) -- from #cet-snippets @ discord
