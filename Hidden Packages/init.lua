@@ -32,7 +32,7 @@ local SONAR_SOUNDS = {
 	"ui_scanning_Stop"
 }
 
-local SETTINGS_FILE = "SETTINGS.v2.2.json"
+local SETTINGS_FILE = "SETTINGS.v2.2.1.json"
 local MOD_SETTINGS = { -- defaults set here
 	DebugMode = false,
 	SpawnPackageRange = 100,
@@ -48,7 +48,7 @@ local MOD_SETTINGS = { -- defaults set here
 	ScannerEnabled = false,
 	StickyMarkers = 3,
 	ScannerImmersive = false,
-	RewardRandomItem = false
+	RandomRewardItemList = false
 }
 
 local SESSION_DATA = { -- will persist
@@ -81,7 +81,8 @@ local SCANNER_OPENED = nil
 local SCANNER_NEAREST_PKG = nil
 local SCANNER_SOUND_TICK = 0.0
 
-local ITEMS = {}
+local RANDOM_ITEMS_POOL = {}
+local ITEM_LIST_FOLDER = "ItemLists/" -- end with a /
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
@@ -245,24 +246,39 @@ registerForEvent('onInit', function()
 			saveSettings()
 		end)
 
-		nativeSettings.addSwitch("/Hidden Packages/Rewards", "Random Item (EXPERIMENTAL)", "Get a random item from each package", MOD_SETTINGS.RewardRandomItem, false, function(state)
-			-- read item list
-			if state and LEX.fileExists("items.txt") then
+		-- scan ItemList folder and generate table suitable for nativeSettings
+		local itemlistPaths = {[1] = false}
+		local itemlistDisplayNames = {[1] = "Disabled"}
+		local nsItemListDefault = 1
+		local nsItemListCurrent = 1
+		for k,v in pairs( listFilesInFolder(ITEM_LIST_FOLDER, ".list") ) do
+			local itemlist_path = ITEM_LIST_FOLDER .. v
 
-				local file = io.open("items.txt", "r")
-				local lines = file:lines()
-				for line in lines do
-					table.insert(ITEMS, line)
+			-- read how many lines to append it to display name
+			local file = io.open(itemlist_path, "r")
+			local lines = file:lines()
+			local c = 0
+			for line in lines do
+				if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
+					c = c + 1
 				end
-				file:close()
-
-				MOD_SETTINGS.RewardRandomItem = true
-				saveSettings()
-			else
-				ITEMS = {}
-				MOD_SETTINGS.RewardRandomItem = false
-				saveSettings()
 			end
+			file:close()
+
+			-- append count to filename
+			local i = LEX.tableLen(itemlistPaths) + 1
+			itemlistDisplayNames[i] = v:gsub(".list", "") .. " (" .. tostring(c) .. " items)"
+			itemlistPaths[i] = itemlist_path
+			if itemlist_path == MOD_SETTINGS.RandomRewardItemList then
+				nsItemListCurrent = i
+			end
+		end
+
+		nativeSettings.addSelectorString("/Hidden Packages/Rewards", "Random Item", "Get a random item from each package", itemlistDisplayNames, nsItemListCurrent, nsItemListDefault, function(value)
+			MOD_SETTINGS.RandomRewardItemList = itemlistPaths[value]
+			RANDOM_ITEMS_POOL = {}
+			saveSettings()
+			NEED_TO_REFRESH = true
 		end)
 
 	end
@@ -311,6 +327,23 @@ registerForEvent('onInit', function()
         if NEED_TO_REFRESH then
         	switchLocationsFile(MOD_SETTINGS.MapPath)
         	NEED_TO_REFRESH = false
+
+        	-- read item list
+			if MOD_SETTINGS.RandomRewardItemList then -- will be false if Disabled... "if value > 1 then" would also work
+				--print("READING ITEMLIST:", MOD_SETTINGS.RandomRewardItemList)
+				RANDOM_ITEMS_POOL = {}
+				local file = io.open(MOD_SETTINGS.RandomRewardItemList, "r")
+				local lines = file:lines()
+				for line in lines do
+					if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
+						table.insert(RANDOM_ITEMS_POOL, line)
+					else
+						--print("Not inserting line to item pool:", line)
+					end
+				end
+				file:close()
+				--print("RANDOM_ITEMS_POOL:", LEX.tableLen(RANDOM_ITEMS_POOL))
+			end
         end
 
         -- have to do this here in case user switched settings
@@ -506,10 +539,22 @@ function collectHP(packageIndex)
 		Game.AddExp("Level", xp_reward)
 	end
 
-	if MOD_SETTINGS.RewardRandomItem then
-		local item = ITEMS[math.random(1,#ITEMS)]
-		Game.AddToInventory(item, 1)
-		HUDMessage("Got Item: " .. item)
+	if MOD_SETTINGS.RandomRewardItemList then -- will be false if Disabled
+		local rng = RANDOM_ITEMS_POOL[math.random(1,#RANDOM_ITEMS_POOL)]
+		local item = rng
+		local amount = 1
+		
+		if string.find(rng, ",") then -- custom amount of item specified in ItemList
+			item, amount = rng:match("([^,]+),([^,]+)") -- https://stackoverflow.com/a/19269176
+			amount = tonumber(amount)
+		end
+
+		Game.AddToInventory(item, amount)
+		if amount > 1 then
+			HUDMessage("Got Item: " .. item .. " (" .. tostring(amount) .. ")")
+		else
+			HUDMessage("Got Item: " .. item)
+		end
 	end
 
 end
