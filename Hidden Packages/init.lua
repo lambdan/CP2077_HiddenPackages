@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.2-rc"
+	version = "2.3"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -32,7 +32,7 @@ local SONAR_SOUNDS = {
 	"ui_scanning_Stop"
 }
 
-local SETTINGS_FILE = "SETTINGS.v2.2.1.json"
+local SETTINGS_FILE = "SETTINGS.v2.3.json"
 local MOD_SETTINGS = { -- defaults set here
 	DebugMode = false,
 	SpawnPackageRange = 100,
