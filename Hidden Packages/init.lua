@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.3"
+	version = "2.3.1"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -329,6 +329,7 @@ registerForEvent('onInit', function()
         end
 
         checkIfPlayerNearAnyPackage() -- otherwise if you made a save near a package and just stand still it wont spawn until you move
+        readItemList(MOD_SETTINGS.RandomRewardItemList) -- need to read it here in case player just started the game without changing any setting
     end)
 
     GameSession.OnEnd(function()
@@ -347,24 +348,8 @@ registerForEvent('onInit', function()
 
         if NEED_TO_REFRESH then
         	switchLocationsFile(MOD_SETTINGS.MapPath)
+        	readItemList(MOD_SETTINGS.RandomRewardItemList)
         	NEED_TO_REFRESH = false
-
-        	-- read item list
-			if MOD_SETTINGS.RandomRewardItemList then -- will be false if Disabled... "if value > 1 then" would also work
-				--print("READING ITEMLIST:", MOD_SETTINGS.RandomRewardItemList)
-				RANDOM_ITEMS_POOL = {}
-				local file = io.open(MOD_SETTINGS.RandomRewardItemList, "r")
-				local lines = file:lines()
-				for line in lines do
-					if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
-						table.insert(RANDOM_ITEMS_POOL, line)
-					else
-						--print("Not inserting line to item pool:", line)
-					end
-				end
-				file:close()
-				--print("RANDOM_ITEMS_POOL:", LEX.tableLen(RANDOM_ITEMS_POOL))
-			end
         end
 
         -- have to do this here in case user switched settings
@@ -1030,5 +1015,22 @@ function resetProgress(MapPath)
 				table.remove(SESSION_DATA.collectedPackageIDs, k2)
 			end
 		end
+	end
+end
+
+function readItemList(ItemListPath)
+	RANDOM_ITEMS_POOL = {}
+	if ItemListPath then -- will be false if Disabled
+		local file = io.open(ItemListPath, "r")
+		local lines = file:lines()
+		for line in lines do
+			if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
+				table.insert(RANDOM_ITEMS_POOL, line)
+			else
+				--print("Not inserting line to item pool:", line)
+			end
+		end
+		file:close()
+		--print("RANDOM_ITEMS_POOL:", LEX.tableLen(RANDOM_ITEMS_POOL))
 	end
 end
