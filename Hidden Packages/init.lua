@@ -85,6 +85,7 @@ local RANDOM_ITEMS_POOL = {}
 local ITEM_LIST_FOLDER = "ItemLists/" -- end with a /
 
 local RESET_BUTTON_PRESSED = 0
+local STATS_REQUESTED = false
 
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
@@ -157,7 +158,14 @@ registerForEvent('onInit', function()
 			MOD_SETTINGS.MapPath = mapsPaths[value]
 			saveSettings()
 			NEED_TO_REFRESH = true
+			STATS_REQUESTED = false
+			RESET_BUTTON_PRESSED = 0
 		end)
+
+		nativeSettings.addButton("/Hidden Packages/Maps", "Show stats", "Click this button and then go in-game to see your stats for this map", "Stats", 45, function()
+			-- button is kinda wonky... maybe a bug with 1.5 and nativeSettings?
+			STATS_REQUESTED = MOD_SETTINGS.MapPath
+ 		end)
 
 		nativeSettings.addButton("/Hidden Packages/Maps", "Reset progress for this map", "Reset Progress for this map. You have to press the button 10 times. You will hear a sound when you have.", "Reset Progress", 35, function()
  			RESET_BUTTON_PRESSED = RESET_BUTTON_PRESSED + 1
@@ -366,6 +374,13 @@ registerForEvent('onInit', function()
 			table.remove(SCANNER_MARKERS, 1)
 		end
 
+		if STATS_REQUESTED then
+			local stats_map = readMap(STATS_REQUESTED)
+			local msg = "Packages Collected: " .. tostring(countCollected(stats_map.filepath)) .. " / " .. tostring(stats_map.amount)
+			STATS_REQUESTED = false
+			showCustomShardPopup("Stats: " .. stats_map.display_name, msg)
+		end
+
 
 	end)
 
@@ -449,8 +464,8 @@ registerForEvent('onDraw', function()
 
 		if LOADED_MAP ~= nil then
 			ImGui.Separator()
-			ImGui.Text("Collected: " .. tostring(countCollected()) .. "/" .. tostring(LOADED_MAP.amount))
-			ImGui.Text("countCollected(): " .. tostring(countCollected()))
+			ImGui.Text("Collected: " .. tostring(countCollected(LOADED_MAP.filepath)) .. "/" .. tostring(LOADED_MAP.amount))
+			ImGui.Text("countCollected(): " .. tostring(countCollected(LOADED_MAP.filepath)))
 		end
 		
 		-- showing NP at all times has a huge performance impact
@@ -518,7 +533,7 @@ function collectHP(packageIndex)
 	unmarkPackage(packageIndex)
 	despawnPackage(packageIndex)
 
-	local collected = countCollected()
+	local collected = countCollected(LOADED_MAP.filepath)
 	
     if collected == LOADED_MAP.amount then
     	-- got all packages
@@ -816,10 +831,18 @@ function HUDMessage(msg)
 	HUDMessage_Last = os:clock()
 end
 
-function countCollected()
+function countCollected(MapPath)
 	-- cant just check length of collectedPackageIDs as it may include packages from other location files
+	local map
+	if MapPath ~= LOADED_MAP.filepath then
+		map = readMap(MapPath)
+	else
+		-- no nead to read the map file again if its already loaded
+		map = LOADED_MAP
+	end
+
 	local c = 0
-	for k,v in pairs(LOADED_MAP.packages) do
+	for k,v in pairs(map.packages) do
 		if LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) then
 			c = c + 1
 		end
@@ -870,6 +893,7 @@ function listFilesInFolder(folder, ext)
 end
 
 function readMap(path)
+	--print("readMap", path)
 	if path == false or not LEX.fileExists(path) then
 		return nil
 	end
