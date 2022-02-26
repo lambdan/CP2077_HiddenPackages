@@ -46,8 +46,8 @@ local MOD_SETTINGS = { -- defaults set here
 	PackageMultiply = false,
 	MapPath = MAP_DEFAULT,
 	ScannerEnabled = false,
-	StickyMarkers = 3,
-	ScannerImmersive = false,
+	StickyMarkers = 0,
+	ScannerImmersive = true,
 	RandomRewardItemList = false
 }
 
@@ -230,12 +230,12 @@ registerForEvent('onInit', function()
 			saveSettings()
 		end)
 
-		nativeSettings.addSwitch("/Hidden Packages/Scanner", "Immersive", "Make it more Immersive™", MOD_SETTINGS.ScannerImmersive, false, function(state)
+		nativeSettings.addSwitch("/Hidden Packages/Scanner", "Immersive", "Make it more Immersive™", MOD_SETTINGS.ScannerImmersive, true, function(state)
 			MOD_SETTINGS.ScannerImmersive = state
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeInt("/Hidden Packages/Scanner", "Sticky Markers", "Keep up to this many packages marked. Markers will disappear after closing the scanner if set to 0.", 0, 10, 1, MOD_SETTINGS.StickyMarkers, 3, function(value)
+		nativeSettings.addRangeInt("/Hidden Packages/Scanner", "Sticky Markers", "Keep up to this many packages marked. Markers will disappear after closing the scanner if set to 0.", 0, 10, 1, MOD_SETTINGS.StickyMarkers, 0, function(value)
 			MOD_SETTINGS.StickyMarkers = value
 			saveSettings()
 		end)
