@@ -376,9 +376,17 @@ registerForEvent('onInit', function()
 
 		if STATS_REQUESTED then
 			local stats_map = readMap(STATS_REQUESTED)
-			local msg = "Packages Collected: " .. tostring(countCollected(stats_map.filepath)) .. " / " .. tostring(stats_map.amount)
+			local count = countCollected(stats_map.filepath)
+			local percent = (count/stats_map.amount) * 100
+			local total_collected = 0
+			for k,v in pairs(SESSION_DATA.collectedPackageIDs) do
+				total_collected = total_collected + 1
+			end
+			local msg = "Packages collected on map \'" .. stats_map.display_name .. "\':\n" .. tostring(count) .. " / " .. tostring(stats_map.amount) .. " (" .. string.format("%.1f", percent) .. "%)"
+			msg = msg .. "\n\n" .. "Total packages collected (across all maps):\n" .. tostring(total_collected)
+			
 			STATS_REQUESTED = false
-			showCustomShardPopup("Stats: " .. stats_map.display_name, msg)
+			showCustomShardPopup("Hidden Packages Stats", msg)
 		end
 
 
