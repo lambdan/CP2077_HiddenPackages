@@ -84,6 +84,8 @@ local SCANNER_SOUND_TICK = 0.0
 local RANDOM_ITEMS_POOL = {}
 local ITEM_LIST_FOLDER = "ItemLists/" -- end with a /
 
+local RESET_BUTTON_PRESSED = 0
+
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
 end)
@@ -156,6 +158,16 @@ registerForEvent('onInit', function()
 			saveSettings()
 			NEED_TO_REFRESH = true
 		end)
+
+		nativeSettings.addButton("/Hidden Packages/Maps", "Reset progress for this map", "Reset Progress for this map. You have to press the button 10 times. You will hear a sound when you have.", "Reset Progress", 35, function()
+ 			RESET_BUTTON_PRESSED = RESET_BUTTON_PRESSED + 1
+ 			if RESET_BUTTON_PRESSED >= 10 then
+ 				resetProgress(MOD_SETTINGS.MapPath)
+ 				Game.GetAudioSystem():Play("ui_hacking_access_denied")
+ 				RESET_BUTTON_PRESSED = 0
+ 				NEED_TO_REFRESH = true
+ 			end
+ 		end)
 
 		-- sonar
 
@@ -273,8 +285,7 @@ registerForEvent('onInit', function()
 				nsItemListCurrent = i
 			end
 		end
-
-		nativeSettings.addSelectorString("/Hidden Packages/Rewards", "Random Item", "Get a random item from each package", itemlistDisplayNames, nsItemListCurrent, nsItemListDefault, function(value)
+		nativeSettings.addSelectorString("/Hidden Packages/Rewards", "Random Item", "Get a random item from an ItemList. ItemLists are stored in \'.../mods/Hidden Packages/ItemLists\'.", itemlistDisplayNames, nsItemListCurrent, nsItemListDefault, function(value)
 			MOD_SETTINGS.RandomRewardItemList = itemlistPaths[value]
 			RANDOM_ITEMS_POOL = {}
 			saveSettings()
@@ -292,6 +303,7 @@ registerForEvent('onInit', function()
         debugMsg('Game Session Started')
         isInGame = true
         isPaused = false
+        RESET_BUTTON_PRESSED = 0
         
         if NEED_TO_REFRESH then
         	switchLocationsFile(MOD_SETTINGS.MapPath)
@@ -323,6 +335,7 @@ registerForEvent('onInit', function()
 
 	GameSession.OnResume(function()
 		isPaused = false
+		RESET_BUTTON_PRESSED = 0
 
         if NEED_TO_REFRESH then
         	switchLocationsFile(MOD_SETTINGS.MapPath)
@@ -972,4 +985,18 @@ function showCustomShardPopup(titel, text) -- from #cet-snippets @ discord
     shardUIevent.title = titel
     shardUIevent.text = text
     Game.GetUISystem():QueueEvent(shardUIevent)
+end
+
+function resetProgress(MapPath)
+	--print("resetting", MapPath)
+	local map = readMap(MapPath)
+
+	for k,v in pairs(map.packages) do
+		for k2,v2 in pairs(SESSION_DATA.collectedPackageIDs) do
+			if v["identifier"] == v2 then
+				--print("removing package", v["identifier"], v2)
+				table.remove(SESSION_DATA.collectedPackageIDs, k2)
+			end
+		end
+	end
 end
