@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.3.1"
+	version = "2.3.2"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -561,6 +561,7 @@ function collectHP(packageIndex)
 	end
 
 	if MOD_SETTINGS.RandomRewardItemList then -- will be false if Disabled
+		math.randomseed(os.time())
 		local rng = RANDOM_ITEMS_POOL[math.random(1,#RANDOM_ITEMS_POOL)]
 		local item = rng
 		local amount = 1
