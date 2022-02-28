@@ -1,0 +1,20 @@
+{
+	"id": "djs_testpkg2",
+	"name": "Teleport tester",
+	"position": {
+		"x": 1095.84,
+		"y": 1167.39,
+		"z": 1.24,
+		"w": 1
+	},
+	"shard_message": {
+		"title": "Lets go teleport!",
+		"body": "Aaaaaaaaaaaaaaaaaaaaaahhhh"
+	},
+	"teleport": {
+		"x": 1200,
+		"y": 1167.39,
+		"z": 1.24,
+		"w": 1 
+	}
+}
