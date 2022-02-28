@@ -12,7 +12,7 @@
 	"pickup_sound": "ui_jingle_vehicle_arrive",
 	"prop": "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent",
 	"prop_z_boost": 0.25,
-	"respawn": false,
+	"respawn": 1,
 	"items": [
 			{"item": "Items.QuickHackLegendaryMaterial1", "amount": 100},
 			{"item": "Items.EpicLooseShirtRecipe"}

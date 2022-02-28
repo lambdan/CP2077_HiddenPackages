@@ -21,7 +21,7 @@ local MOD_SETTINGS = {
 }
 
 local SESSION_DATA = { -- will persist
-	pickedup = {}
+	permapickedup = {}
 }
 
 local HUDMessage_Current = ""
@@ -121,13 +121,20 @@ registerForEvent('onInit', function()
 		isPaused = false
 	end)
 
-	Observe('PlayerPuppet', 'OnAction', function(action)
+--[[	Observe('PlayerPuppet', 'OnAction', function(action)
 		if LOADED_PICKUPS ~= nil and not isPaused and isInGame then
 			checkIfPlayerNearAnyPackage()
 		end
-	end)
+	end)--]]
 
 	GameSession.TryLoad()
+
+end)
+
+registerForEvent('onUpdate', function(delta)
+    if LOADED_PICKUPS ~= {} and not isPaused and isInGame then
+    	checkIfPlayerNearAnyPackage()
+    end
 
 end)
 
@@ -170,9 +177,16 @@ function destroyObject(e)
 end
 
 function collectHP(packageIndex)
-	HUDMessage("picked up something")
+	LOADED_PICKUPS[packageIndex]["picked_up"] = os.clock()
 	despawnPackage(packageIndex)
-	print("collectHP", packageIndex)
+
+	local pkg = LOADED_PICKUPS[packageIndex]
+	HUDMessage("picked up " .. pkg["name"])
+	
+
+	if pkg.permanent then
+		table.insert(SESSION_DATA.permapickedup, pkg["id"])
+	end
 
 end
 
@@ -226,7 +240,7 @@ function findNearestPackageWithinRange(range) -- 0 = any range
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
 	for k,v in pairs(LOADED_PICKUPS) do
-		if (LEX.tableHasValue(SESSION_DATA.pickedup, v["id"]) == false) then -- package not collected
+		if (LEX.tableHasValue(SESSION_DATA.permapickedup, v["id"]) == false) then -- package not collected
 			if range == 0 or math.abs(playerPos["x"] - v.position.x) <= range then
 				if range == 0 or math.abs(playerPos["y"] - v.position.y) <= range then
 					local d = Vector4.Distance(playerPos, ToVector4{x=v.position.x, y=v.position.y, z=v.position.z, w=v.position.w})
@@ -254,16 +268,16 @@ function checkIfPlayerNearAnyPackage()
 	local nearest = nil
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 	for k,v in pairs(LOADED_PICKUPS) do
-		print(v.position.x)
-		if not (LEX.tableHasValue(SESSION_DATA.pickedup, v.id)) then -- no point in checking for already collected packages
+		if not (LEX.tableHasValue(SESSION_DATA.permapickedup, v.id)) then -- no point in checking for already collected packages
 			-- this looks 100% ridiculous but in my testing it is faster than always calculating the Vector4.Distance
 			if math.abs(playerPos["x"] - v.position.x) <= MOD_SETTINGS.SpawnPackageRange then
 				if math.abs(playerPos["y"] - v.position.y) <= MOD_SETTINGS.SpawnPackageRange then
 					if math.abs(playerPos["z"] - v.position.z) <= MOD_SETTINGS.SpawnPackageRange then
-						print("in range of", v.id)
 
 						if not activePackages[k] then -- package is not already spawned
-							spawnPackage(k, v.prop, v.prop_z_boost)
+							if not v.picked_up or os.clock() >= (v.picked_up + v.respawn) then -- package not picked up or respawn timer not hit
+								spawnPackage(k, v.prop, v.prop_z_boost)
+							end
 						end
 
 						local d = Vector4.Distance(playerPos, ToVector4{x=v.position.x, y=v.position.y, z=v.position.z, w=v.position.w})
@@ -378,6 +392,7 @@ function readPickup(path)
 	local pickup = {
 		enabled = true, -- not modified
 		filepath = path, -- not modified
+		picked_up = false, -- used for figuring out when to respawn
 		id = "", -- required
 		position = { -- required
 			x = 0,
@@ -394,6 +409,7 @@ function readPickup(path)
 		prop = DEFAULT_PROP,
 		prop_z_boost = DEFAULT_PROP_Z_BOOST,
 		respawn = DEFAULT_RESPAWN,
+		permanent = false,
 		money = false,
 		xp = false,
 		streetcred = false,
@@ -502,6 +518,10 @@ function readPickup(path)
 
 	if j["collect_range"] ~= nil then
 		pickup.collect_range = j["collect_range"]
+	end
+
+	if j["permanent"] ~= nil then
+		pickup.permanent = j["permanent"]
 	end
 
 	print(path, "OK!")

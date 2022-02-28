@@ -9,6 +9,8 @@
 	package_prop = string
 	package_prop_z_boost = float
 	respawn = float
+	permanent = bool 
+	collect_range = number
 	money = int
 	xp = int
 	streetcred = int

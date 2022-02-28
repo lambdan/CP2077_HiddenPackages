@@ -8,7 +8,7 @@
 		"w": 1
 	},
 	"vehicle_allowed": false,
-	"pickup_msg": "You picked up the test package!!!!!!!",
+	"pickup_msg": "Perma pkg!",
 	"pickup_sound": "ui_hacking_access_granted",
 	"shard_message": {
 		"title": "Title of shard",
@@ -16,7 +16,7 @@
 	},
 	"prop": "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent",
 	"prop_z_boost": 0.25,
-	"respawn": 5,
+	"permanent": true,
 	"money": 1111,
 	"exp": 222,
 	"streetcred": 666,
