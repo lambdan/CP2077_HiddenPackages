@@ -1,19 +1,20 @@
 
 # Schema
 
-	id = string
-	name = string
-	position = {x=float,y=float,z=float,w=float}
-	vehicle_allowed = bool
-	shard_message = {title=string, body=string}
-	package_prop = string
-	package_prop_z_boost = float
-	respawn = float
-	permanent = bool 
-	collect_range = number
-	money = int
-	xp = int
-	streetcred = int
-	items = [
-		{item=string, amount=int}
-	]
+|Name|Type|Required|Default|Comment|Implemented|
+|-----------|----|----|--------|-------|-------|
+|id|string|**yes**|||✅|
+|position|array of x,y,z,w|**yes**|||✅|
+|name|string|no|fallsback to filepath||✅|
+|vehicle_allowed|bool|no|false|||
+|shard_message|array of title(string) and body(string)|no|no|||
+|package_prop|string|no|holocubes||✅|
+|package_prop_z_boost|number|no|0.25||✅|
+|respawn|number|no|3||✅|
+|permanent|bool|no|false||✅|
+|collect_range|number|no|0.5||✅|
+|money|number|no||||
+|exp|number|no||||
+|streetcred|number|no||||
+|items|array of item(string), amount(number)|no||||
+|teleport|array of x,y,z,w|no||||
