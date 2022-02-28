@@ -1,9 +1,9 @@
 {
 	"id": "djs_testpkg1",
-	"name": "This is shown in menu!",
+	"name": "Test package #1",
 	"position": {
-		"x": 1095.84,
-		"y": 1162.39,
+		"x": -1100.931,
+		"y": 1146.354,
 		"z": 1.24,
 		"w": 1
 	},
@@ -14,11 +14,11 @@
 		"title": "Title of shard",
 		"body": "Body text"
 	},
-	"package_prop": "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent",
-	"package_prop_z_boost": 0.25,
+	"prop": "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent",
+	"prop_z_boost": 0.25,
 	"respawn": 5,
 	"money": 1111,
-	"xp": 222,
+	"exp": 222,
 	"streetcred": 666,
 	"items": [
 			{"item": "Items.QuickHackLegendaryMaterial1", "amount": 100},

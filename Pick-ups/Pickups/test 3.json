@@ -1,0 +1,20 @@
+{
+	"id": "djs_testpkg3",
+	"name": "The arasaka logo",
+	"position": {
+		"x": -1120.931,
+		"y": 1146.354,
+		"z": 1.24,
+		"w": 1
+	},
+	"vehicle_allowed": true,
+	"pickup_msg": "you can drive over this one!",
+	"pickup_sound": "ui_jingle_vehicle_arrive",
+	"prop": "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent",
+	"prop_z_boost": 0.25,
+	"respawn": false,
+	"items": [
+			{"item": "Items.QuickHackLegendaryMaterial1", "amount": 100},
+			{"item": "Items.EpicLooseShirtRecipe"}
+	]
+}

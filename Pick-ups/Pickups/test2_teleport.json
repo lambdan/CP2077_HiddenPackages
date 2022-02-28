@@ -1,9 +1,9 @@
 {
 	"id": "djs_testpkg2",
-	"name": "Teleport tester",
+	"name": "The teleporting laundry basket",
 	"position": {
-		"x": 1095.84,
-		"y": 1167.39,
+		"x": -1110.086,
+		"y": 1146.406,
 		"z": 1.24,
 		"w": 1
 	},
@@ -16,5 +16,7 @@
 		"y": 1167.39,
 		"z": 1.24,
 		"w": 1 
-	}
+	},
+	"prop": "base\\environment\\decoration\\containers\\baskets\\laundry_basket\\laundry_basket_a_full_a_dst.ent",
+	"collect_range": 1
 }

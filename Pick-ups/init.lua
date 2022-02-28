@@ -13,18 +13,16 @@ local GameUI = require("Modules/GameUI.lua")
 local LEX = require("Modules/LuaEX.lua")
 
 local PICKUPS_FOLDER = "Pickups/" -- should end with a /
+local LOADED_PICKUPS = {}
 
 local MOD_SETTINGS = {
-	ShowMessage = true
+	ShowMessage = true,
+	SpawnPackageRange = 100
 }
 
 local SESSION_DATA = { -- will persist
 	pickedup = {}
 }
-
-local DISABLED_PICKUPS = {}
-
-local LOADED_MAP = nil
 
 local HUDMessage_Current = ""
 local HUDMessage_Last = 0
@@ -33,6 +31,8 @@ local HUDMessage_Last = 0
 
 local DEFAULT_PROP = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent"
 local DEFAULT_PROP_Z_BOOST = 0.25
+local DEFAULT_RESPAWN = 3
+local DEFAULT_COLLECT_RANGE = 0.5
 
 -- inits
 local activePackages = {}
@@ -67,14 +67,14 @@ end)
 registerForEvent('onInit', function()
 	loadSettings()
 
-	-- scan Maps folder and generate table suitable for nativeSettings
+	-- load pickups
 	local nsPickups = {}
 	for k,v in pairs( listFilesInFolder(PICKUPS_FOLDER, ".json") ) do
 		local map_path = PICKUPS_FOLDER .. v
 		local read_pup = readPickup(map_path)
 
-		if read_map ~= nil then
-			table.insert(nsPickups, read_pup)
+		if read_pup ~= nil then
+			table.insert(LOADED_PICKUPS, read_pup)
 		end
 	end
 
@@ -82,17 +82,18 @@ registerForEvent('onInit', function()
 	nativeSettings = GetMod("nativeSettings")
 	if nativeSettings ~= nil then
 
-		nativeSettings.addTab("/Pick-Ups", "Pick-Ups")
+		nativeSettings.addTab("/PickUps", "Pick-Ups")
+		nativeSettings.addSubcategory("/PickUps/ActivePickups", "Loaded Pick-Ups:")
 
-		nativeSettings.addSubcategory("/Pick-Ups/ActivePickups", "Active Pick-Ups")
-
-		for k,v in pairs(nsPickups) do
-			nativeSettings.addSwitch("/Pick-Ups/ActivePickups", v["name"], v["filepath"], MOD_SETTINGS.SonarEnabled, true, function(state)
-				print("toggled",v["name"])
+		for k,v in pairs(LOADED_PICKUPS) do
+			nativeSettings.addSwitch("/PickUps/ActivePickups", v["name"], "(Note that toggling state here does nothing... for now)", LOADED_PICKUPS[k]["enabled"], false, function(state)
+				-- do sometihng here...
 			end)
 		end
 
 	end -- end NativeSettings
+
+
 	
 
 	GameSession.StoreInDir('Sessions')
@@ -100,15 +101,8 @@ registerForEvent('onInit', function()
 	isInGame = Game.GetPlayer() and Game.GetPlayer():IsAttached() and not Game.GetSystemRequestsHandler():IsPreGame()
 
     GameSession.OnStart(function()
-        debugMsg('Game Session Started')
         isInGame = true
         isPaused = false
-        RESET_BUTTON_PRESSED = 0
-        
-        if NEED_TO_REFRESH then
-        	switchLocationsFile(MOD_SETTINGS.MapPath)
-        	NEED_TO_REFRESH = false
-        end
 
         checkIfPlayerNearAnyPackage() -- otherwise if you made a save near a package and just stand still it wont spawn until you move
     end)
@@ -125,16 +119,10 @@ registerForEvent('onInit', function()
 
 	GameSession.OnResume(function()
 		isPaused = false
-
-        if NEED_TO_REFRESH then
-        	switchLocationsFile(MOD_SETTINGS.MapPath)
-        	NEED_TO_REFRESH = false
-        end
-
 	end)
 
 	Observe('PlayerPuppet', 'OnAction', function(action)
-		if LOADED_MAP ~= nil and not isPaused and isInGame then
+		if LOADED_PICKUPS ~= nil and not isPaused and isInGame then
 			checkIfPlayerNearAnyPackage()
 		end
 	end)
@@ -143,13 +131,13 @@ registerForEvent('onInit', function()
 
 end)
 
-function spawnPackage(i)
+function spawnPackage(i,prop,zboost)
 	if activePackages[i] then
 		return false
 	end
 
-	local pkg = LOADED_MAP.packages[i]
-	local entity = spawnObjectAtPos(pkg["x"], pkg["y"], pkg["z"]+PACKAGE_PROP_Z_BOOST, pkg["w"], PACKAGE_PROP)
+	local pos = LOADED_PICKUPS[i].position
+	local entity = spawnObjectAtPos(pos["x"], pos["y"], pos["z"]+zboost, pos["w"], prop)
 	if entity then
 		activePackages[i] = entity
 		return entity
@@ -182,86 +170,26 @@ function destroyObject(e)
 end
 
 function collectHP(packageIndex)
-	local pkg = LOADED_MAP.packages[packageIndex]
-
-	if not LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg["identifier"]) then
-		table.insert(SESSION_DATA.collectedPackageIDs, pkg["identifier"])
-	end
-	
-	unmarkPackage(packageIndex)
+	HUDMessage("picked up something")
 	despawnPackage(packageIndex)
-
-	local collected = countCollected(LOADED_MAP.filepath)
-	
-    if collected == LOADED_MAP.amount then
-    	-- got all packages
-    	Game.GetAudioSystem():Play('ui_jingle_quest_success')
-    	HUDMessage("ALL HIDDEN PACKAGES COLLECTED!")
-    	--showCustomShardPopup("All Hidden Packages collected!", "You have collected all " .. tostring(LOADED_MAP["amount"]) .. " packages from the map \"" .. LOADED_MAP["display_name"] .. "\"!")
-    else
-    	-- regular package pickup
-    	Game.GetAudioSystem():Play('ui_loot_rarity_legendary')
-    	local msg = "Hidden Package " .. tostring(collected) .. " of " .. tostring(LOADED_MAP.amount)
-    	HUDMessage(msg)
-    end	
-
-	local multiplier = 1
-	if MOD_SETTINGS.PackageMultiply then
-		multiplier = collected
-	end
-
-	local money_reward = MOD_SETTINGS.MoneyPerPackage * multiplier
-	if money_reward	> 0 then
-		Game.AddToInventory("Items.money", money_reward)
-	end
-
-	local sc_reward = MOD_SETTINGS.StreetcredPerPackage * multiplier
-	if sc_reward > 0 then
-		Game.AddExp("StreetCred", sc_reward)
-	end
-
-	local xp_reward = MOD_SETTINGS.ExpPerPackage * multiplier
-	if xp_reward > 0 then
-		Game.AddExp("Level", xp_reward)
-	end
-
-	if MOD_SETTINGS.RandomRewardItemList then -- will be false if Disabled
-		math.randomseed(os.time())
-		local rng = RANDOM_ITEMS_POOL[math.random(1,#RANDOM_ITEMS_POOL)]
-		local item = rng
-		local amount = 1
-		
-		if string.find(rng, ",") then -- custom amount of item specified in ItemList
-			item, amount = rng:match("([^,]+),([^,]+)") -- https://stackoverflow.com/a/19269176
-			amount = tonumber(amount)
-		end
-
-		Game.AddToInventory(item, amount)
-		if amount > 1 then
-			HUDMessage("Got Item: " .. item .. " (" .. tostring(amount) .. ")")
-		else
-			HUDMessage("Got Item: " .. item)
-		end
-	end
+	print("collectHP", packageIndex)
 
 end
 
 function reset()
 	destroyAllPackageObjects()
-	removeAllMappins()
 	activePackages = {}
-	activeMappins = {}
 	lastCheck = 0
 	debugMsg("reset() OK")
 	return true
 end
 
 function destroyAllPackageObjects()
-	if LOADED_MAP == nil then
+	if LOADED_PICKUPS == nil then
 		return
 	end
 
-	for k,v in pairs(LOADED_MAP.packages) do
+	for k,v in pairs(LOADED_PICKUPS) do
 		despawnPackage(k)
 	end
 end
@@ -289,7 +217,7 @@ function placeMapPin(x,y,z,w) -- from CET Snippets discord
 end
 
 function findNearestPackageWithinRange(range) -- 0 = any range
-	if not isInGame	or LOADED_MAP == nil then
+	if not isInGame	or LOADED_PICKUPS == nil then
 		return false
 	end
 
@@ -297,11 +225,11 @@ function findNearestPackageWithinRange(range) -- 0 = any range
 	local nearestPackage = false
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
-	for k,v in pairs(LOADED_MAP.packages) do
-		if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then -- package not collected
-			if range == 0 or math.abs(playerPos["x"] - v["x"]) <= range then
-				if range == 0 or math.abs(playerPos["y"] - v["y"]) <= range then
-					local d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
+	for k,v in pairs(LOADED_PICKUPS) do
+		if (LEX.tableHasValue(SESSION_DATA.pickedup, v["id"]) == false) then -- package not collected
+			if range == 0 or math.abs(playerPos["x"] - v.position.x) <= range then
+				if range == 0 or math.abs(playerPos["y"] - v.position.y) <= range then
+					local d = Vector4.Distance(playerPos, ToVector4{x=v.position.x, y=v.position.y, z=v.position.z, w=v.position.w})
 					if nearest == nil or d < nearest then
 						nearest = d
 						nearestPackage = k
@@ -314,27 +242,8 @@ function findNearestPackageWithinRange(range) -- 0 = any range
 	return nearestPackage -- returns package index or false
 end
 
-function switchLocationsFile(path)
-	if path == false then -- false == mod disabled
-		reset()
-		LOADED_MAP = nil
-		return true
-	end
-
-	if LEX.fileExists(path) then
-		reset()
-		LOADED_MAP = readMap(path)
-		checkIfPlayerNearAnyPackage()
-		return true
-	end
-
-	return false
-end
-
 function checkIfPlayerNearAnyPackage()
-	return
-
-	if LOADED_MAP == nil or (isPaused == true) or (isInGame == false) then
+	if LOADED_PICKUPS == nil or (isPaused == true) or (isInGame == false) then
 		return
 	end
 
@@ -344,24 +253,26 @@ function checkIfPlayerNearAnyPackage()
 
 	local nearest = nil
 	local playerPos = Game.GetPlayer():GetWorldPosition()
-	for k,v in pairs(LOADED_MAP.packages) do
-		if not (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"])) then -- no point in checking for already collected packages
+	for k,v in pairs(LOADED_PICKUPS) do
+		print(v.position.x)
+		if not (LEX.tableHasValue(SESSION_DATA.pickedup, v.id)) then -- no point in checking for already collected packages
 			-- this looks 100% ridiculous but in my testing it is faster than always calculating the Vector4.Distance
-			if math.abs(playerPos["x"] - v["x"]) <= MOD_SETTINGS.SpawnPackageRange then
-				if math.abs(playerPos["y"] - v["y"]) <= MOD_SETTINGS.SpawnPackageRange then
-					if math.abs(playerPos["z"] - v["z"]) <= MOD_SETTINGS.SpawnPackageRange then
+			if math.abs(playerPos["x"] - v.position.x) <= MOD_SETTINGS.SpawnPackageRange then
+				if math.abs(playerPos["y"] - v.position.y) <= MOD_SETTINGS.SpawnPackageRange then
+					if math.abs(playerPos["z"] - v.position.z) <= MOD_SETTINGS.SpawnPackageRange then
+						print("in range of", v.id)
 
 						if not activePackages[k] then -- package is not already spawned
-							spawnPackage(k)
+							spawnPackage(k, v.prop, v.prop_z_boost)
 						end
 
-						local d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
+						local d = Vector4.Distance(playerPos, ToVector4{x=v.position.x, y=v.position.y, z=v.position.z, w=v.position.w})
 
 						if nearest == nil or d < nearest then
 							nearest = d
 						end
 
-						if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
+						if (d <= v.collect_range) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
 							collectHP(k)
 							checkThrottle = 1
 						elseif d < 10 then
@@ -415,7 +326,7 @@ function HUDMessage(msg)
 end
 
 function distanceToPackage(i)
-	local pkg = LOADED_MAP.packages[i]
+	local pkg = LOADED_PICKUPS[i].position
 	return Vector4.Distance(Game.GetPlayer():GetWorldPosition(), ToVector4{x=pkg["x"], y=pkg["y"], z=pkg["z"], w=pkg["w"]})
 end
 
@@ -455,85 +366,146 @@ function listFilesInFolder(folder, ext)
 end
 
 function readPickup(path)
-	debugMsg("read pickup: " .. path)
+	print("readPickup",path)
 	if path == false or not LEX.fileExists(path) then
 		return nil
 	end
 
+	local file = io.open(path,"r")
+	local j = json.decode(file:read("*a"))
+	file:close()
+
 	local pickup = {
-		id = "ididididid",
-		name = "hello?",
-		filepath = path,
-		position = {
+		enabled = true, -- not modified
+		filepath = path, -- not modified
+		id = "", -- required
+		position = { -- required
 			x = 0,
 			y = 0,
 			z = 0,
 			w = 1
 		},
+		collect_range = DEFAULT_COLLECT_RANGE,
+		name = path,
 		vehicle_allowed  = false,
 		pickup_msg = false,
 		pickup_sound = false,
-		shard_message = false,
-		package_prop = DEFAULT_PROP,
-		package_prop_z_boost = DEFAULT_PROP_Z_BOOST,
-		respawn = false,
+		shard_message = {},
+		prop = DEFAULT_PROP,
+		prop_z_boost = DEFAULT_PROP_Z_BOOST,
+		respawn = DEFAULT_RESPAWN,
 		money = false,
 		xp = false,
 		streetcred = false,
-		items = false, 
-		teleport = false
+		items = {}, 
+		teleport = {}
 	}
 
-	return pickup
-end
 
-function readMap(path)
-	--print("readMap", path)
-	if path == false or not LEX.fileExists(path) then
+	-- first read required attributes, and return nil if they fail 
+
+	if j["id"] ~= nil then
+		pickup.id = j["id"]
+	else
+		print(path,"is missing id")
 		return nil
 	end
 
-	local map = {
-		amount = 0,
-		display_name = LEX.basename(path),
-		display_name_amount = "",
-		identifier = LEX.basename(path), 
-		packages = {},
-		filepath = path
-	}
+	if j["position"] ~= nil then
+		if j["position"]["x"] ~= nil then
+			pickup.position.x = j["position"]["x"]
+		else
+			print(path,"is missing x")
+			return nil
+		end
+		if j["position"]["y"] ~= nil then
+			pickup.position.y = j["position"]["y"]
+		else
+			print(path,"is missing y")
+			return nil
+		end
+		if j["position"]["z"] ~= nil then
+			pickup.position.z = j["position"]["z"]
+		else
+			print(path,"is missing z")
+			return nil
+		end
+		-- w is not strictly necessary
+	else
+		print(path,"is missing position")
+		return nil
+	end
 
-	for line in io.lines(path) do
-		if (line ~= nil) and (line ~= "") and not (LEX.stringStarts(line, "#")) and not (LEX.stringStarts(line, "//")) then
-			if LEX.stringStarts(line, "DISPLAY_NAME:") then
-				map.display_name = LEX.trim(string.match(line, ":(.*)"))
-			elseif LEX.stringStarts(line, "IDENTIFIER:") then
-				map.identifier = LEX.trim(string.match(line, ":(.*)"))
-			else
-				-- regular coordinates
-				local components = {}
-				for c in string.gmatch(line, '([^ ]+)') do
-					table.insert(components,c)
-				end
+	-- now read optional attributes
 
-				local pkg = {}
-				pkg.x = tonumber(components[1])
-				pkg.y = tonumber(components[2])
-				pkg.z = tonumber(components[3])
-				pkg.w = tonumber(components[4])
-				pkg.identifier = map.identifier .. ": x=" .. tostring(pkg.x) .. " y=" .. tostring(pkg.y) .. " z=" .. tostring(pkg.z) .. " w=" .. tostring(pkg.w)
-				table.insert(map.packages, pkg)
-			end
+	if j["name"] ~= nil then
+		pickup.name = j["name"]
+	end
+
+	if j["vehicle_allowed"] ~= nil then
+		pickup.vehicle_allowed = j["vehicle_allowed"]
+	end
+
+	if j["pickup_msg"] ~= nil then
+		pickup.pickup_msg = j["pickup_msg"]
+	end
+
+	if j["pickup_sound"] ~= nil then
+		pickup.pickup_sound = j["pickup_sound"]
+	end
+
+	if j["shard_message"] ~= nil then
+		if j["shard_message"]["title"] ~= nil then
+			pickup.shard_message.title = j["shard_message"]["title"]
+		else
+			pickup.shard_message.title = ""
+		end
+
+		if j["shard_message"]["body"] ~= nil then
+			pickup.shard_message.body = j["shard_message"]["body"]
+		else
+			pickup.shard_message.body = ""
 		end
 	end
 
-	map.amount = LEX.tableLen(map.packages)
-	if map.amount == 0 or map.display_name == nil or map.identifier == nil then
-		return nil
+	if j["prop"] ~= nil then
+		pickup.prop = j["prop"]
 	end
 
-	map.display_name_amount = map.display_name .. " (" .. tostring(map.amount) .. ")"
+	if j["prop_z_boost"] ~= nil then
+		pickup.prop_z_boost = j["prop_z_boost"]
+	end
 
-	return map
+	if j["respawn"] ~= nil then
+		pickup.respawn = j["respawn"]
+	end
+
+	if j["money"] ~= nil then
+		pickup.money = j["money"]
+	end
+
+	if j["exp"] ~= nil then
+		pickup.exp = j["exp"]
+	end
+
+	if j["streetcred"] ~= nil then
+		pickup.streetcred = j["streetcred"]
+	end
+
+	if j["items"] ~= nil then
+		pickup.items = j["items"]
+	end
+
+	if j["teleport"] ~= nil then
+		pickup.teleport = j["teleport"]
+	end
+
+	if j["collect_range"] ~= nil then
+		pickup.collect_range = j["collect_range"]
+	end
+
+	print(path, "OK!")
+	return pickup
 end
 
 function showCustomShardPopup(titel, text) -- from #cet-snippets @ discord

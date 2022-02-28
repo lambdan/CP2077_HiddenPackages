@@ -1,2 +1,5 @@
 
 *.zip
+Pick-Ups/Sessions/*lua
+db.sqlite3
+*.log
