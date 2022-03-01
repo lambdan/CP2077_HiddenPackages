@@ -18,3 +18,4 @@
 |streetcred|number|no||||
 |items|array of item(string), amount(number)|no||||
 |teleport|array of x,y,z,w|no||||
+|prereq_pickups|array of pickup ids|no||✅|
