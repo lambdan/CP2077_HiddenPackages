@@ -21,7 +21,7 @@ local MOD_SETTINGS = {
 }
 
 local SESSION_DATA = { -- will persist
-	permapickedup = {}
+	collected = {}
 }
 
 local HUDMessage_Current = ""
@@ -58,6 +58,20 @@ end)
 -- 		end
 -- 	end
 -- end)
+
+registerForEvent("onDraw", function()
+	if DEBUG_MODE then
+		ImGui.Begin("Pick-Ups debug")
+		ImGui.Text("SESSION_DATA.collected:")
+		for k,v in pairs(SESSION_DATA.collected) do
+			ImGui.Text(tostring(k) .. "," .. tostring(v))
+		end
+		if ImGui.Button("reset session") then
+			SESSION_DATA.collected = {}
+		end
+		ImGui.End()
+	end
+end)
 
 registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
     GameSession.TrySave()
@@ -177,16 +191,32 @@ function destroyObject(e)
 end
 
 function collectHP(packageIndex)
-	LOADED_PICKUPS[packageIndex]["picked_up"] = os.clock()
-	despawnPackage(packageIndex)
-
 	local pkg = LOADED_PICKUPS[packageIndex]
-	HUDMessage("picked up " .. pkg["name"])
-	
+	pkg.picked_up = os.clock()
 
-	if pkg.permanent then
-		table.insert(SESSION_DATA.permapickedup, pkg["id"])
+	--LOADED_PICKUPS[packageIndex].picked_up = os.clock()
+	--despawnPackage(packageIndex)
+
+	
+	
+	if not LEX.tableHasValue(SESSION_DATA.collected, pkg["id"]) then
+		-- add all packages (even the ones that arent permanent) to the table, it doesnt hurt + can use multiple packages for the prereq option
+		table.insert(SESSION_DATA.collected, pkg["id"])
 	end
+
+	if pkg.pickup_msg then
+		HUDMessage(pkg.pickup_msg)
+	end
+
+	if pkg.shard_message.title ~= nil and pkg.shard_message.body ~= nil then
+		showCustomShardPopup(pkg.shard_message.title, pkg.shard_message.body)
+	end
+
+	if pkg.pickup_sound then
+		Game.GetAudioSystem():Play(pkg.pickup_sound)
+	end
+
+	LOADED_PICKUPS[packageIndex] = pkg
 
 end
 
@@ -240,7 +270,7 @@ function findNearestPackageWithinRange(range) -- 0 = any range
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
 	for k,v in pairs(LOADED_PICKUPS) do
-		if (LEX.tableHasValue(SESSION_DATA.permapickedup, v["id"]) == false) then -- package not collected
+		if not (v.permanent and (LEX.tableHasValue(SESSION_DATA.collected, v["id"]) == false)) then -- package not collected
 			if range == 0 or math.abs(playerPos["x"] - v.position.x) <= range then
 				if range == 0 or math.abs(playerPos["y"] - v.position.y) <= range then
 					local d = Vector4.Distance(playerPos, ToVector4{x=v.position.x, y=v.position.y, z=v.position.z, w=v.position.w})
@@ -268,15 +298,30 @@ function checkIfPlayerNearAnyPackage()
 	local nearest = nil
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 	for k,v in pairs(LOADED_PICKUPS) do
-		if not (LEX.tableHasValue(SESSION_DATA.permapickedup, v.id)) then -- no point in checking for already collected packages
+		--print(k,v)
+		if not (v.permanent and LEX.tableHasValue(SESSION_DATA.collected, v.id)) then -- no point in checking for collected permanents
 			-- this looks 100% ridiculous but in my testing it is faster than always calculating the Vector4.Distance
 			if math.abs(playerPos["x"] - v.position.x) <= MOD_SETTINGS.SpawnPackageRange then
 				if math.abs(playerPos["y"] - v.position.y) <= MOD_SETTINGS.SpawnPackageRange then
 					if math.abs(playerPos["z"] - v.position.z) <= MOD_SETTINGS.SpawnPackageRange then
 
 						if not activePackages[k] then -- package is not already spawned
-							if not v.picked_up or os.clock() >= (v.picked_up + v.respawn) then -- package not picked up or respawn timer not hit
-								spawnPackage(k, v.prop, v.prop_z_boost)
+							if not v.picked_up or os.clock() >= (v.picked_up + v.respawn) then -- package can spawn bc package not picked up or respawn timer hit
+								local spawn_prereqs_fulfilled = true
+
+								if LEX.tableLen(v.prereq_pickups) > 0 then -- check if pickup has any prereqs
+									for a,b in pairs(v.prereq_pickups) do
+										if not LEX.tableHasValue(SESSION_DATA.collected, b) then
+											-- prereq pickup not fulfilled, the package is not ok to spawn
+											spawn_prereqs_fulfilled = false
+										end
+									end
+								end
+
+								if spawn_prereqs_fulfilled then
+									spawnPackage(k, v.prop, v.prop_z_boost)
+								end
+
 							end
 						end
 
@@ -414,7 +459,8 @@ function readPickup(path)
 		xp = false,
 		streetcred = false,
 		items = {}, 
-		teleport = {}
+		teleport = {},
+		prereq_pickups = {}
 	}
 
 
@@ -522,6 +568,10 @@ function readPickup(path)
 
 	if j["permanent"] ~= nil then
 		pickup.permanent = j["permanent"]
+	end
+
+	if j["prereq_pickups"] ~= nil then
+		pickup.prereq_pickups = j["prereq_pickups"]
 	end
 
 	print(path, "OK!")

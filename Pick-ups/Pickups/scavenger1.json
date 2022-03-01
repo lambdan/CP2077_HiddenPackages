@@ -1,0 +1,18 @@
+{
+	"id": "scav1",
+	"name": "Scavenger Hunt 1",
+	"position": {
+		"x": -1098.78,
+		"y": 1145.61,
+		"z": 1.24,
+		"w": 1
+	},
+	"vehicle_allowed": false,
+	"shard_message": {
+		"title": "SCAVENGER HUNT!!!",
+		"body": "Your next clue is on the dock to your left"
+	},
+	"prop": "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent",
+	"prop_z_boost": 0.25,
+	"permanent": true
+}

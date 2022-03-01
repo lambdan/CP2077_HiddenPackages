@@ -1,0 +1,19 @@
+{
+	"id": "scav2",
+	"name": "Scavenger Hunt clue 2",
+	"position": {
+		"x": -1096.23,
+		"y": 1162.31,
+		"z": 1.24,
+		"w": 1
+	},
+	"vehicle_allowed": false,
+	"shard_message": {
+		"title": "SCAVENGER HUNT!!! 2nd package",
+		"body": "Your next clue is behind you..."
+	},
+	"prop": "base/environment/architecture/common/int/int_mlt_jp_arasaka_a/arasaka_logo_tree.ent",
+	"prop_z_boost": 0.25,
+	"permanent": true,
+	"prereq_pickups": ["scav1"]
+}

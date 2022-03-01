@@ -1,0 +1,19 @@
+{
+	"id": "scav3",
+	"name": "Scavenger Hunt clue 3",
+	"position": {
+		"x": -1117.976,
+		"y": 1164.124,
+		"z": 1.24,
+		"w": 1
+	},
+	"vehicle_allowed": false,
+	"prop": "base/quest/side_quests/sq026/entities/sq026_judys_pizza.ent",
+	"prop_z_boost": 1,
+	"permanent": true,
+	"prereq_pickups": ["scav1", "scav2"],
+	"collect_range": 0.8,
+	"pickup_msg": "pizza eatsa",
+	"pickup_sound": "ui_loot_eat"
+
+}
