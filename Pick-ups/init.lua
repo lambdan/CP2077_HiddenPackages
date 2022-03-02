@@ -118,7 +118,8 @@ registerForEvent('onInit', function()
         isInGame = true
         isPaused = false
 
-        checkIfPlayerNearAnyPackage() -- otherwise if you made a save near a package and just stand still it wont spawn until you move
+        -- since we just use onupdate for pick-ups we dont need this one
+        --checkIfPlayerNearAnyPackage() -- otherwise if you made a save near a package and just stand still it wont spawn until you move
     end)
 
     GameSession.OnEnd(function()
@@ -260,32 +261,6 @@ function placeMapPin(x,y,z,w) -- from CET Snippets discord
 	return Game.GetMappinSystem():RegisterMappin(mappinData, ToVector4{x=x, y=y, z=z, w=w} ) -- returns ID
 end
 
-function findNearestPackageWithinRange(range) -- 0 = any range
-	if not isInGame	or LOADED_PICKUPS == nil then
-		return false
-	end
-
-	local nearest = nil
-	local nearestPackage = false
-	local playerPos = Game.GetPlayer():GetWorldPosition()
-
-	for k,v in pairs(LOADED_PICKUPS) do
-		if not (v.permanent and (LEX.tableHasValue(SESSION_DATA.collected, v["id"]) == false)) then -- package not collected
-			if range == 0 or math.abs(playerPos["x"] - v.position.x) <= range then
-				if range == 0 or math.abs(playerPos["y"] - v.position.y) <= range then
-					local d = Vector4.Distance(playerPos, ToVector4{x=v.position.x, y=v.position.y, z=v.position.z, w=v.position.w})
-					if nearest == nil or d < nearest then
-						nearest = d
-						nearestPackage = k
-					end
-				end
-			end
-		end
-	end
-
-	return nearestPackage -- returns package index or false
-end
-
 function checkIfPlayerNearAnyPackage()
 	if LOADED_PICKUPS == nil or (isPaused == true) or (isInGame == false) then
 		return
@@ -424,8 +399,7 @@ function listFilesInFolder(folder, ext)
 	return files
 end
 
-function readPickup(path)
-	print("readPickup",path)
+function readPickup(path) -- path=path to json file
 	if path == false or not LEX.fileExists(path) then
 		return nil
 	end
@@ -434,19 +408,22 @@ function readPickup(path)
 	local j = json.decode(file:read("*a"))
 	file:close()
 
+
+
 	local pickup = {
-		enabled = true, -- not modified
-		filepath = path, -- not modified
-		picked_up = false, -- used for figuring out when to respawn
-		id = "", -- required
-		position = { -- required
+		enabled = true, -- is the package enabled? (not user modified)
+		filename = path:match("^.+/(.+)$"), -- name of the base .json (not including subfolder)
+		filepath = path, -- full path to the .json (not user modified)
+		picked_up = false, -- used for figuring out when to respawn. will be set to a os.clock() on pickup
+		id = "", -- *required*. a unique id for the package, i.e. djs_package1. will be stored in SESSION_DATA.collected
+		position = { -- *required*. position of the package.
 			x = 0,
 			y = 0,
 			z = 0,
-			w = 1
+			w = 1 -- w seems to always be 1 but lets include just to be safe
 		},
-		collect_range = DEFAULT_COLLECT_RANGE,
-		name = path,
+		collect_range = DEFAULT_COLLECT_RANGE, -- how close you need to be to a package to pick it up. HP used 0.5.
+		name = "", -- a pretty display name of the package. might be used for a screen where you toggle packages, or on pick-up. will fallback to full filename.
 		vehicle_allowed  = false,
 		pickup_msg = false,
 		pickup_sound = false,
@@ -462,8 +439,6 @@ function readPickup(path)
 		teleport = {},
 		prereq_pickups = {}
 	}
-
-
 	-- first read required attributes, and return nil if they fail 
 
 	if j["id"] ~= nil then
@@ -502,6 +477,8 @@ function readPickup(path)
 
 	if j["name"] ~= nil then
 		pickup.name = j["name"]
+	else
+		pickup.name = pickup.filename
 	end
 
 	if j["vehicle_allowed"] ~= nil then
@@ -574,7 +551,11 @@ function readPickup(path)
 		pickup.prereq_pickups = j["prereq_pickups"]
 	end
 
-	print(path, "OK!")
+	print("readPickup", path, ":")
+	for k,v in pairs(pickup) do
+		print(k..":", v)
+	end
+	print("---------END READMAP------------")
 	return pickup
 end
 
