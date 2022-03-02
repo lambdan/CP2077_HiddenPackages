@@ -3,72 +3,67 @@ local PickUpsMetadata = {
 	version = "0.1"
 }
 
-local DEBUG_MODE = true
-
-local SETTINGS_FILE = "settings_1.0.json"
+local DEBUG_MODE = true -- change to false before shipping!!!!!
+local DEBUG_MSG = "debug_msg"
 
 local GameSession = require("Modules/GameSession.lua")
 local GameHUD = require("Modules/GameHUD.lua")
 local GameUI = require("Modules/GameUI.lua")
 local LEX = require("Modules/LuaEX.lua")
 
-local PICKUPS_FOLDER = "Pickups/" -- should end with a /
-local LOADED_PICKUPS = {}
-
-local MOD_SETTINGS = {
-	ShowMessage = true,
+local MOD_SETTINGS = { -- saved to SETTINGS_FILE
 	SpawnPackageRange = 100
 }
 
-local SESSION_DATA = { -- will persist
+local SESSION_DATA = { -- will persist thru GameSession
 	collected = {}
 }
 
-local HUDMessage_Current = ""
-local HUDMessage_Last = 0
+-- paths
+local PICKUPS_FOLDER = "Pickups/" -- folder with json files, should end with a /
+local SETTINGS_FILE = "settings_1.0.json" -- change if MOD_SETTINGS gets new vars
 
 -- defaults
-
 local DEFAULT_PROP = "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent"
 local DEFAULT_PROP_Z_BOOST = 0.25
 local DEFAULT_RESPAWN = 3
 local DEFAULT_COLLECT_RANGE = 0.5
 
--- inits
-local activePackages = {}
+-- other vars
+local LOADED_PICKUPS = {} -- all loaded jsons will be store in here as pickups
+local activePackages = {} -- packages that are spawned
 local isInGame = false
 local isPaused = true
-local NEED_TO_REFRESH = false
-
-local lastCheck = 0
-local checkThrottle = 1
+local lastCheck = 0 -- when checkifplayernearanypackage() was last run
+local checkThrottle = 1 -- wait atleast this before checkifplayernearanypackage()
+local HUDMessage_Current = "" -- if >1 hudmessage's are triggered in short succession the first one wont show...
+local HUDMessage_Last = 0 --     so we store it and add another one to it
 
 registerHotkey("pup_whereami", "Where Am I?", function()
 	local pos = Game.GetPlayer():GetWorldPosition()
 	showCustomShardPopup("Where Am I?", "You are standing here:\nX:  " .. string.format("%.3f",pos["x"]) .. "\nY:  " .. string.format("%.3f",pos["y"]) .. "\nZ:  " .. string.format("%.3f",pos["z"]) .. "\nW:  " .. pos["w"])
 end)
 
--- registerForEvent("onOverlayOpen", function()
--- 	print("HP SESSION DATA:")
--- 	--print(SESSION_DATA)
--- 	for k,v in pairs(SESSION_DATA) do
--- 		print(k,v)
--- 		for k2,v2 in pairs(v) do
--- 			print(k2,v2)
--- 		end
--- 	end
--- end)
-
 registerForEvent("onDraw", function()
 	if DEBUG_MODE then
-		ImGui.Begin("Pick-Ups debug")
-		ImGui.Text("SESSION_DATA.collected:")
+		local w,h = GetDisplayResolution()
+		ImGui.SetNextWindowPos(w/3, h-200)
+		ImGui.Begin("pick-ups debug", true, ImGuiWindowFlags.NoTitleBar + ImGuiWindowFlags.NoMove + ImGuiWindowFlags.NoScrollbar + ImGuiWindowFlags.AlwaysAutoResize + ImGuiWindowFlags.NoResize)
+		ImGui.Text(DEBUG_MSG)
+		ImGui.Text("LOADED_PICKUPS: " .. tostring(LEX.tableLen(LOADED_PICKUPS)))
+		ImGui.Text("activePackages: " .. tostring(LEX.tableLen(activePackages)))
+		ImGui.Text("SESSION_DATA.collected: [")
 		for k,v in pairs(SESSION_DATA.collected) do
-			ImGui.Text(tostring(k) .. "," .. tostring(v))
+			ImGui.Text(tostring(v) .. " ")
+			if k % 5 ~= 0 then
+				ImGui.SameLine()
+			end
 		end
-		if ImGui.Button("reset session") then
-			SESSION_DATA.collected = {}
-		end
+		ImGui.SameLine()
+		ImGui.Text("]")
+		--if ImGui.Button("reset session") then
+		--	SESSION_DATA.collected = {}
+		--end
 		ImGui.End()
 	end
 end)
@@ -97,6 +92,13 @@ registerForEvent('onInit', function()
 	if nativeSettings ~= nil then
 
 		nativeSettings.addTab("/PickUps", "Pick-Ups")
+
+		nativeSettings.addSubcategory("/PickUps/Debug", "debug")
+
+		nativeSettings.addButton("/PickUps/Debug", "Reset collected", "Reset SESSION_DATA.collected", "Reset", 45, function()
+ 			SESSION_DATA.collected = {}
+ 		end)
+
 		nativeSettings.addSubcategory("/PickUps/ActivePickups", "Loaded Pick-Ups:")
 
 		for k,v in pairs(LOADED_PICKUPS) do
@@ -123,7 +125,6 @@ registerForEvent('onInit', function()
     end)
 
     GameSession.OnEnd(function()
-        debugMsg('Game Session Ended')
         isInGame = false
         reset()
     end)
@@ -193,13 +194,9 @@ end
 
 function collectHP(packageIndex)
 	local pkg = LOADED_PICKUPS[packageIndex]
-	pkg.picked_up = os.clock()
+	pkg.picked_up_time = os.clock()
+	pkg.picked_up_pos = Game.GetPlayer():GetWorldPosition()
 
-	--LOADED_PICKUPS[packageIndex].picked_up = os.clock()
-	--despawnPackage(packageIndex)
-
-	
-	
 	if not LEX.tableHasValue(SESSION_DATA.collected, pkg["id"]) then
 		-- add all packages (even the ones that arent permanent) to the table, it doesnt hurt + can use multiple packages for the prereq option
 		table.insert(SESSION_DATA.collected, pkg["id"])
@@ -225,7 +222,6 @@ function reset()
 	destroyAllPackageObjects()
 	activePackages = {}
 	lastCheck = 0
-	debugMsg("reset() OK")
 	return true
 end
 
@@ -273,54 +269,61 @@ function checkIfPlayerNearAnyPackage()
 	local nearest = nil
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 	for k,v in pairs(LOADED_PICKUPS) do
-		--print(k,v)
 		if not (v.permanent and LEX.tableHasValue(SESSION_DATA.collected, v.id)) then -- no point in checking for collected permanents
 			-- this looks 100% ridiculous but in my testing it is faster than always calculating the Vector4.Distance
-			if math.abs(playerPos["x"] - v.position.x) <= MOD_SETTINGS.SpawnPackageRange then
-				if math.abs(playerPos["y"] - v.position.y) <= MOD_SETTINGS.SpawnPackageRange then
-					if math.abs(playerPos["z"] - v.position.z) <= MOD_SETTINGS.SpawnPackageRange then
+			if math.abs(playerPos["x"] - v.position.x) <= MOD_SETTINGS.SpawnPackageRange and math.abs(playerPos["y"] - v.position.y) <= MOD_SETTINGS.SpawnPackageRange and math.abs(playerPos["z"] - v.position.z) <= MOD_SETTINGS.SpawnPackageRange then
+				-- pkg is in range
+				
+				local pkg_allowed = true
+				local d = Vector4.Distance(playerPos, ToVector4{x=v.position.x, y=v.position.y, z=v.position.z, w=v.position.w})
 
-						if not activePackages[k] then -- package is not already spawned
-							if not v.picked_up or os.clock() >= (v.picked_up + v.respawn) then -- package can spawn bc package not picked up or respawn timer hit
-								local spawn_prereqs_fulfilled = true
-
-								if LEX.tableLen(v.prereq_pickups) > 0 then -- check if pickup has any prereqs
-									for a,b in pairs(v.prereq_pickups) do
-										if not LEX.tableHasValue(SESSION_DATA.collected, b) then
-											-- prereq pickup not fulfilled, the package is not ok to spawn
-											spawn_prereqs_fulfilled = false
-										end
-									end
-								end
-
-								if spawn_prereqs_fulfilled then
-									spawnPackage(k, v.prop, v.prop_z_boost)
-								end
-
-							end
-						end
-
-						local d = Vector4.Distance(playerPos, ToVector4{x=v.position.x, y=v.position.y, z=v.position.z, w=v.position.w})
-
-						if nearest == nil or d < nearest then
-							nearest = d
-						end
-
-						if (d <= v.collect_range) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
-							collectHP(k)
-							checkThrottle = 1
-						elseif d < 10 then
-							checkThrottle = 0.1
-						elseif d < 50 then
-							checkThrottle = 0.5
-						end
-
-					elseif activePackages[k] then
-						despawnPackage(k)
-					end
-				elseif activePackages[k] then
-					despawnPackage(k)
+				-- (optimization: we use d (distance to specified package position) instead of the actual v.picked_up_pos)
+				if v.picked_up_pos and d < (v.collect_range*4) then
+					-- we are still standing too close to the package we just picked up
+					pkg_allowed = false
+					DEBUG_MSG = v.id .. " - too close"
+				elseif v.picked_up_pos and d >= (v.collect_range*4) then
+					-- we have moved far away enough from the package since we last picked it up
+					LOADED_PICKUPS[k].picked_up_pos = false
+					DEBUG_MSG = v.id .. " - reset picked_up_pos"
 				end
+
+				if v.picked_up_time and os.clock() < (v.picked_up_time + v.respawn) then
+					-- package should not respawn yet
+					pkg_allowed = false
+					DEBUG_MSG = v.id .. " - not respawn yet"
+				end
+
+				if LEX.tableLen(v.prereq_pickups) > 0 then
+					for a,b in pairs(v.prereq_pickups) do
+						if not LEX.tableHasValue(SESSION_DATA.collected, b) then
+							-- we are missing a prereq package
+							pkg_allowed = false
+							DEBUG_MSG = v.id .. " - missing prereq"
+						end
+					end
+				end
+				
+				if pkg_allowed and not activePackages[k] then -- package is allowed and is not already spawned
+					spawnPackage(k, v.prop, v.prop_z_boost)
+					DEBUG_MSG = v.id .. " - OK! spawn!"
+				end
+
+				if nearest == nil or d < nearest then -- dont use pkg_allowed here in case pkg suddenly becomes available when player is nearby
+					nearest = d
+				end
+
+				if pkg_allowed and (d <= v.collect_range) and (v.vehicle_allowed or not inVehicle()) then
+					-- pkg is allowed, we're in collect range, and vehicle is allowed or we're not in a vehicle: collect it
+					collectHP(k)
+					despawnPackage(k)
+					checkThrottle = 1
+				elseif d < 10 then
+					checkThrottle = 0.1
+				elseif d < 50 then
+					checkThrottle = 0.5
+				end
+
 			elseif activePackages[k] then
 				despawnPackage(k)
 			end
@@ -334,18 +337,6 @@ function checkIfPlayerNearAnyPackage()
 	end
 
 	lastCheck = os.clock()
-end
-
-
-function debugMsg(msg)
-	if not MOD_SETTINGS.DebugMode then
-		return
-	end
-
-	print("HP debug: " .. msg)
-	if isInGame then
-		HUDMessage("HP: " .. msg)
-	end
 end
 
 function HUDMessage(msg)
@@ -414,7 +405,8 @@ function readPickup(path) -- path=path to json file
 		enabled = true, -- is the package enabled? (not user modified)
 		filename = path:match("^.+/(.+)$"), -- name of the base .json (not including subfolder)
 		filepath = path, -- full path to the .json (not user modified)
-		picked_up = false, -- used for figuring out when to respawn. will be set to a os.clock() on pickup
+		picked_up_time = false, -- used for figuring out when to respawn. will be set to a os.clock() on pickup
+		picked_up_pos = false, -- player pos when picked up stored here 
 		id = "", -- *required*. a unique id for the package, i.e. djs_package1. will be stored in SESSION_DATA.collected
 		position = { -- *required*. position of the package.
 			x = 0,
@@ -424,21 +416,22 @@ function readPickup(path) -- path=path to json file
 		},
 		collect_range = DEFAULT_COLLECT_RANGE, -- how close you need to be to a package to pick it up. HP used 0.5.
 		name = "", -- a pretty display name of the package. might be used for a screen where you toggle packages, or on pick-up. will fallback to full filename.
-		vehicle_allowed  = false,
-		pickup_msg = false,
-		pickup_sound = false,
-		shard_message = {},
-		prop = DEFAULT_PROP,
-		prop_z_boost = DEFAULT_PROP_Z_BOOST,
-		respawn = DEFAULT_RESPAWN,
-		permanent = false,
-		money = false,
-		xp = false,
-		streetcred = false,
-		items = {}, 
-		teleport = {},
-		prereq_pickups = {}
+		vehicle_allowed  = false, -- can package be collected while in a vehicle?
+		pickup_msg = false, -- HUDMessage on pickup
+		pickup_sound = false, -- play this sound (string) on pickup
+		shard_message = {}, -- title,body (strings) of shard_message on pickup
+		prop = DEFAULT_PROP, -- prop used
+		prop_z_boost = DEFAULT_PROP_Z_BOOST, -- z boost (height) to prop
+		respawn = DEFAULT_RESPAWN, -- how long to wait (secs) before respawning package. has no effect if permanent is activated.
+		permanent = false, -- is package permanently collected? wont respawn if it is
+		money = false, -- give this money on pickup
+		xp = false, -- give this xp on pickup
+		streetcred = false, -- give this streetcred xp on pickup
+		items = {}, -- give these items on pickup
+		teleport = {}, -- teleport here on pickup
+		prereq_pickups = {} -- these package id's need to be in SESSION_DATA.collected before package will spawn
 	}
+
 	-- first read required attributes, and return nil if they fail 
 
 	if j["id"] ~= nil then
@@ -519,6 +512,10 @@ function readPickup(path) -- path=path to json file
 		pickup.respawn = j["respawn"]
 	end
 
+	if j["permanent"] ~= nil then
+		pickup.permanent = j["permanent"]
+	end
+
 	if j["money"] ~= nil then
 		pickup.money = j["money"]
 	end
@@ -543,19 +540,19 @@ function readPickup(path) -- path=path to json file
 		pickup.collect_range = j["collect_range"]
 	end
 
-	if j["permanent"] ~= nil then
-		pickup.permanent = j["permanent"]
-	end
-
 	if j["prereq_pickups"] ~= nil then
 		pickup.prereq_pickups = j["prereq_pickups"]
 	end
 
-	print("readPickup", path, ":")
-	for k,v in pairs(pickup) do
-		print(k..":", v)
+
+	if DEBUG_MODE then
+		print("readPickup", path, ":")
+		for k,v in pairs(pickup) do
+			print(k..":", v)
+		end
+		print("---------END READMAP------------")
 	end
-	print("---------END READMAP------------")
+
 	return pickup
 end
 
