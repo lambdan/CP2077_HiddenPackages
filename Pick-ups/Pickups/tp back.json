@@ -1,0 +1,18 @@
+{
+	"id": "djs_tp_test_back",
+	"position": {
+		"x": -1455.467,
+		"y": 1009.022,
+		"z": 16.5,
+		"w": 1
+	},
+	"pickup_msg": "shit, go back",
+	"teleport": {
+		"x": -1110.086,
+		"y": 1154.806,
+		"z": 100,
+		"w": 1
+	},
+	"prop": "base/gameplay/devices/doors/double_door/double_door_glass_k_v2.ent",
+	"collect_range": 1
+}

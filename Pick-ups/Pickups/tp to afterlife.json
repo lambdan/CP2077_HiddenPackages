@@ -1,0 +1,18 @@
+{
+	"id": "djs_tp_test_afterlife",
+	"position": {
+		"x": -1125.45,
+		"y": 1182.36,
+		"z": 1.217,
+		"w": 1
+	},
+	"teleport": {
+		"x": -1448.865,
+		"y": 1017.570,
+		"z": 16.525,
+		"w": 1
+	},
+	"prop": "base/environment/quests/q115_afterlife/q115_bar_sign.ent",
+	"prop_z_boost": 1,
+	"collect_range": 0.8
+}

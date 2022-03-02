@@ -193,6 +193,7 @@ function destroyObject(e)
 end
 
 function collectHP(packageIndex)
+	despawnPackage(packageIndex)
 	local pkg = LOADED_PICKUPS[packageIndex]
 	pkg.picked_up_time = os.clock()
 	pkg.picked_up_pos = Game.GetPlayer():GetWorldPosition()
@@ -212,6 +213,10 @@ function collectHP(packageIndex)
 
 	if pkg.pickup_sound then
 		Game.GetAudioSystem():Play(pkg.pickup_sound)
+	end
+
+	if pkg.teleport.x ~= nil and pkg.teleport.y ~= nil and pkg.teleport.z ~= nil then
+		Game.TeleportPlayerToPosition(pkg.teleport.x, pkg.teleport.y, pkg.teleport.z)
 	end
 
 	LOADED_PICKUPS[packageIndex] = pkg
@@ -315,8 +320,8 @@ function checkIfPlayerNearAnyPackage()
 
 				if pkg_allowed and (d <= v.collect_range) and (v.vehicle_allowed or not inVehicle()) then
 					-- pkg is allowed, we're in collect range, and vehicle is allowed or we're not in a vehicle: collect it
-					collectHP(k)
 					despawnPackage(k)
+					collectHP(k)
 					checkThrottle = 1
 				elseif d < 10 then
 					checkThrottle = 0.1
