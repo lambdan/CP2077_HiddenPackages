@@ -6,8 +6,8 @@
 |id|string|**yes**|||✅|
 |position|array of x,y,z,w|**yes**|||✅|
 |name|string|no|fallsback to filepath||✅|
-|vehicle_allowed|bool|no|false|||
-|shard_message|array of title(string) and body(string)|no|no|||
+|vehicle_allowed|bool|no|false|not tested|maybe|
+|shard_message|array of title(string) and body(string)|no|no||✅|
 |package_prop|string|no|holocubes||✅|
 |package_prop_z_boost|number|no|0.25||✅|
 |respawn|number|no|3||✅|
