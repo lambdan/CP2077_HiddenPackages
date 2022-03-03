@@ -65,6 +65,7 @@ registerForEvent("onDraw", function()
 		--	SESSION_DATA.collected = {}
 		--end
 		ImGui.End()
+
 	end
 end)
 
@@ -150,38 +151,52 @@ end)
 registerForEvent('onUpdate', function(delta)
     if LOADED_PICKUPS ~= {} and not isPaused and isInGame then
     	checkIfPlayerNearAnyPackage()
-    end
 
+        for k,v in pairs(LOADED_PICKUPS) do
+			if v.rotating and v.spawned and (os.clock() > (v.spawned + (1/60))) then
+				--print(activePackages[k])
+				
+				LOADED_PICKUPS[k].orientation.x = LOADED_PICKUPS[k].orientation.x + 1
+				if LOADED_PICKUPS[k].orientation.x > 360 then
+					LOADED_PICKUPS[k].orientation.x = 0
+				end
+				despawnPackage(k)
+				spawnPackage(k)
+			end
+		end
+    end
 end)
 
-function spawnPackage(i,prop,zboost)
-	if activePackages[i] then
+function spawnPackage(i)
+	local pkg = LOADED_PICKUPS[i]
+	if activePackages[i] or pkg.spawned then
 		return false
 	end
 
-	local pos = LOADED_PICKUPS[i].position
-	local entity = spawnObjectAtPos(pos["x"], pos["y"], pos["z"]+zboost, pos["w"], prop)
+	local entity = spawnObjectAtPos(pkg.position.x, pkg.position.y, pkg.position.z + pkg.prop_z_boost, pkg.position.w, pkg.prop, pkg.orientation)
 	if entity then
 		activePackages[i] = entity
+		LOADED_PICKUPS[i].spawned = os.clock()
 		return entity
 	end
 	return false
 end
 
-function spawnObjectAtPos(x,y,z,w, prop)
+function spawnObjectAtPos(x,y,z,w, prop, ori)
     local transform = Game.GetPlayer():GetWorldTransform()
     local pos = ToVector4{x=x, y=y, z=z, w=w}
     transform:SetPosition(pos)
+    transform:SetOrientation( EulerAngles.new(ori.z, ori.y, ori.x):ToQuat() )
     return WorldFunctionalTests.SpawnEntity(prop, transform, '') -- returns ID
 end
 
 function despawnPackage(i) -- i = package index
-	if activePackages[i] then
-		destroyObject(activePackages[i])
+	if destroyObject(activePackages[i]) then
 		activePackages[i] = nil
+		LOADED_PICKUPS[i].spawned = false
 		return true
 	end
-    return false
+	return false
 end
 
 function destroyObject(e)
@@ -310,7 +325,7 @@ function checkIfPlayerNearAnyPackage()
 				end
 				
 				if pkg_allowed and not activePackages[k] then -- package is allowed and is not already spawned
-					spawnPackage(k, v.prop, v.prop_z_boost)
+					spawnPackage(k)
 					DEBUG_MSG = v.id .. " - OK! spawn!"
 				end
 
@@ -411,7 +426,8 @@ function readPickup(path) -- path=path to json file
 		filename = path:match("^.+/(.+)$"), -- name of the base .json (not including subfolder)
 		filepath = path, -- full path to the .json (not user modified)
 		picked_up_time = false, -- used for figuring out when to respawn. will be set to a os.clock() on pickup
-		picked_up_pos = false, -- player pos when picked up stored here 
+		picked_up_pos = false, -- player pos when picked up stored here
+		spawned = false,
 		id = "", -- *required*. a unique id for the package, i.e. djs_package1. will be stored in SESSION_DATA.collected
 		position = { -- *required*. position of the package.
 			x = 0,
@@ -419,6 +435,12 @@ function readPickup(path) -- path=path to json file
 			z = 0,
 			w = 1 -- w seems to always be 1 but lets include just to be safe
 		},
+		orientation = {
+			z = 0, -- TODO check if these are the proper names
+			y = 0,
+			x = 0
+		},
+		rotating = false, -- should it rotate (animate)
 		collect_range = DEFAULT_COLLECT_RANGE, -- how close you need to be to a package to pick it up. HP used 0.5.
 		name = "", -- a pretty display name of the package. might be used for a screen where you toggle packages, or on pick-up. will fallback to full filename.
 		vehicle_allowed  = false, -- can package be collected while in a vehicle?
@@ -473,6 +495,10 @@ function readPickup(path) -- path=path to json file
 
 	-- now read optional attributes
 
+	if j["orientation"] ~= nil then
+		pickup.orientation = j["orientation"]
+	end
+
 	if j["name"] ~= nil then
 		pickup.name = j["name"]
 	else
@@ -489,6 +515,10 @@ function readPickup(path) -- path=path to json file
 
 	if j["pickup_sound"] ~= nil then
 		pickup.pickup_sound = j["pickup_sound"]
+	end
+
+	if j["rotating"] ~= nil then
+		pickup.rotating = j["rotating"]
 	end
 
 	if j["shard_message"] ~= nil then
