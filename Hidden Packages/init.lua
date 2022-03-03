@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.3.2"
+	version = "2.3.3"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -496,7 +496,7 @@ function spawnObjectAtPos(x,y,z,w, prop)
     local transform = Game.GetPlayer():GetWorldTransform()
     local pos = ToVector4{x=x, y=y, z=z, w=w}
     transform:SetPosition(pos)
-    transform:SetOrientation( EulerAngles.new(0,0,0):ToQuat() )
+    transform:SetOrientation( EulerAngles.new(0,0,0):ToQuat() ) -- package angle/rotation always 0
     return WorldFunctionalTests.SpawnEntity(prop, transform, '') -- returns ID
 end
 
