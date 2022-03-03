@@ -496,6 +496,7 @@ function spawnObjectAtPos(x,y,z,w, prop)
     local transform = Game.GetPlayer():GetWorldTransform()
     local pos = ToVector4{x=x, y=y, z=z, w=w}
     transform:SetPosition(pos)
+    transform:SetOrientation( EulerAngles.new(0,0,0):ToQuat() )
     return WorldFunctionalTests.SpawnEntity(prop, transform, '') -- returns ID
 end
 
