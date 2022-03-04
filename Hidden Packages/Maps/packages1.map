@@ -9,7 +9,7 @@
 IDENTIFIER:packages1
 
 # DISPLAY_NAME is what will be shown in the settings UI. It can be pretty.
-DISPLAY_NAME:Default
+DISPLAY_NAME:Default (1.5 updated)
 
 # Now for the coordinates, they're in this format:
 # X Y Z W (space separated)
@@ -229,4 +229,4 @@ DISPLAY_NAME:Default
 -823.858 1160.389 21.118 1 // Westbrook/Japantown
 -468.831 2453.473 52.785 1 // Watson/Northside RED X
 -1425.846 -73.719 30.333 1 // City Center/Corpo Plaza (cool neon fish area)
--1494.586 -1765.076 79.315 1 // Pacifica/Coastview (pkg119 replacement)
+-1494.586 -1765.076 79.315 1 // Pacifica/Coastview (1.5 fence replacement)
