@@ -512,6 +512,10 @@ function readPickup(path) -- path=path to json file
 		end
 	end
 
+	if j["orientation"] ~= nil then
+		pickup.orientation = j["orientation"]
+	end
+
 	if j["prop"] ~= nil then
 		pickup.prop = j["prop"]
 	end
