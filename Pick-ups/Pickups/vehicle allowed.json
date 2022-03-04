@@ -1,0 +1,14 @@
+{
+	"id": "djs_testpkg_vechicletest",
+	"position": {
+		"x": -1142.818,
+		"y": 1157.748,
+		"z": 17.143,
+		"w": 1
+	},
+	"vehicle_allowed": true,
+	"pickup_msg": "GOT ME!",
+	"prop": "base/quest/main_quests/prologue/q005/afterlife/entities/q005_hologram_cube.ent",
+	"prop_z_boost": 0.25,
+	"collect_range": 1
+}
