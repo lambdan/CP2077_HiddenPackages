@@ -217,6 +217,33 @@ function collectHP(packageIndex)
 		Game.GetAudioSystem():Play(pkg.pickup_sound)
 	end
 
+	if pkg.money > 0 then
+		Game.AddToInventory("Items.money", pkg.money)
+	end
+
+	if pkg.streetcred > 0 then
+		Game.AddExp("StreetCred", pkg.streetcred)
+	end
+
+	if pkg.exp > 0 then
+		Game.AddExp("Level", pkg.xp)
+	end
+
+	for k,v in pairs(pkg.items) do
+		if v.name ~= nil then
+			local amount = 1
+			
+			if v.amount ~= nil then -- check if amount is specified
+				amount = v.amount
+			end
+
+			if amount > 0 then
+				Game.AddToInventory(v.name, amount)
+			end
+		end
+	end
+
+
 	if pkg.teleport.x ~= nil and pkg.teleport.y ~= nil and pkg.teleport.z ~= nil then
 		Game.TeleportPlayerToPosition(pkg.teleport.x, pkg.teleport.y, pkg.teleport.z)
 	end
@@ -436,9 +463,9 @@ function readPickup(path) -- path=path to json file
 		prop_z_boost = DEFAULT_PROP_Z_BOOST, -- z boost (height) to prop
 		respawn = DEFAULT_RESPAWN, -- how long to wait (secs) before respawning package. has no effect if permanent is activated.
 		permanent = false, -- is package permanently collected? wont respawn if it is
-		money = false, -- give this money on pickup
-		xp = false, -- give this xp on pickup
-		streetcred = false, -- give this streetcred xp on pickup
+		money = 0, -- give this money on pickup
+		exp = 0, -- give this xp on pickup
+		streetcred = 0, -- give this streetcred xp on pickup
 		items = {}, -- give these items on pickup
 		teleport = {}, -- teleport here on pickup
 		prereq_pickups = {} -- these package id's need to be in SESSION_DATA.collected before package will spawn
@@ -562,7 +589,7 @@ function readPickup(path) -- path=path to json file
 
 
 	if DEBUG_MODE then
-		print("readPickup", path, ":")
+		print("---- readPickup", path, ": ---------")
 		for k,v in pairs(pickup) do
 			print(k..":", v)
 		end

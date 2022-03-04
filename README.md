@@ -13,9 +13,9 @@
 |respawn|number|no|3||✅|
 |permanent|bool|no|false||✅|
 |collect_range|number|no|0.5||✅|
-|money|number|no||||
-|exp|number|no||||
-|streetcred|number|no||||
-|items|array of item(string), amount(number)|no||||
+|money|number|no|||✅|
+|exp|number|no|||✅|
+|streetcred|number|no|||✅|
+|items|array of item(string), amount(number)|no|||✅|
 |teleport|array of x,y,z,w|no|||✅|
 |prereq_pickups|array of pickup ids|no|||✅|
