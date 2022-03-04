@@ -154,13 +154,13 @@ registerForEvent('onUpdate', function(delta)
 
 end)
 
-function spawnPackage(i,prop,zboost)
+function spawnPackage(i)
 	if activePackages[i] then
 		return false
 	end
 
-	local pos = LOADED_PICKUPS[i].position
-	local entity = spawnObjectAtPos(pos["x"], pos["y"], pos["z"]+zboost, pos["w"], prop)
+	local pkg = LOADED_PICKUPS[i]
+	local entity = spawnObjectAtPos(pkg.position.x, pkg.position.y, (pkg.position.z + pkg.prop_z_boost), pkg.position.w, pkg.prop, pkg.orientation)
 	if entity then
 		activePackages[i] = entity
 		return entity
@@ -168,10 +168,12 @@ function spawnPackage(i,prop,zboost)
 	return false
 end
 
-function spawnObjectAtPos(x,y,z,w, prop)
+function spawnObjectAtPos(x,y,z,w,prop,ori)
+	-- z should include z_boost
     local transform = Game.GetPlayer():GetWorldTransform()
     local pos = ToVector4{x=x, y=y, z=z, w=w}
     transform:SetPosition(pos)
+    transform:SetOrientation( EulerAngles.new(ori.z, ori.y, ori.x):ToQuat() )
     return WorldFunctionalTests.SpawnEntity(prop, transform, '') -- returns ID
 end
 
@@ -418,6 +420,11 @@ function readPickup(path) -- path=path to json file
 			y = 0,
 			z = 0,
 			w = 1 -- w seems to always be 1 but lets include just to be safe
+		},
+		orientation = {
+			z = 0, -- TODO check if these are the proper names
+			y = 0,
+			x = 0
 		},
 		collect_range = DEFAULT_COLLECT_RANGE, -- how close you need to be to a package to pick it up. HP used 0.5.
 		name = "", -- a pretty display name of the package. might be used for a screen where you toggle packages, or on pick-up. will fallback to full filename.
