@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.3.3a"
+	version = "2.4"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -99,6 +99,11 @@ end)
 
 registerHotkey("hp_toggle_mod", "Sonar/Scanner Active Quick Toggle", function() 
 	modActive = not modActive
+	if modActive then
+		HUDMessage("Sonar/Scanner enabled")
+	else
+		HUDMessage("Sonar/Scanner disabled")
+	end
 end)
 
 -- registerForEvent("onOverlayOpen", function()
