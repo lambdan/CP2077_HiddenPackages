@@ -69,6 +69,7 @@ local activeMappins = {} -- object ids for map pins
 local activePackages = {}
 local isInGame = false
 local isPaused = true
+local modActive = true
 local NEED_TO_REFRESH = false
 
 local lastCheck = 0
@@ -94,6 +95,10 @@ end)
 registerHotkey("hp_whereami", "Where Am I?", function()
 	local pos = Game.GetPlayer():GetWorldPosition()
 	showCustomShardPopup("Where Am I?", "You are standing here:\nX:  " .. string.format("%.3f",pos["x"]) .. "\nY:  " .. string.format("%.3f",pos["y"]) .. "\nZ:  " .. string.format("%.3f",pos["z"]) .. "\nW:  " .. pos["w"])
+end)
+
+registerHotkey("hp_toggle_mod", "Sonar/Scanner Active Quick Toggle", function() 
+	modActive = not modActive
 end)
 
 -- registerForEvent("onOverlayOpen", function()
@@ -385,7 +390,7 @@ registerForEvent('onInit', function()
 
 	GameUI.Listen('ScannerOpen', function()
 		
-		if MOD_SETTINGS.ScannerEnabled then
+		if MOD_SETTINGS.ScannerEnabled and modActive then
 			SCANNER_OPENED = os.clock()
 			SCANNER_NEAREST_PKG = findNearestPackageWithinRange(0)
 		end
@@ -414,7 +419,7 @@ registerForEvent('onInit', function()
 end)
 
 registerForEvent('onUpdate', function(delta)
-    if LOADED_MAP ~= nil and not isPaused and isInGame then
+    if LOADED_MAP ~= nil and not isPaused and isInGame and modActive then
 
     	if MOD_SETTINGS.SonarEnabled then
     		sonar()
