@@ -379,32 +379,33 @@ function spawnPackage(i)
 	end
 
 	local pkg = LOADED_MAP.packages[i]
-	local entity = spawnObjectAtPos(pkg["x"], pkg["y"], pkg["z"]+PACKAGE_PROP_Z_BOOST, pkg["w"], PACKAGE_PROP)
-	if entity then
+	local vec = ToVector4{x=pkg.x, y=pkg.y, z=pkg.z + PACKAGE_PROP_Z_BOOST, w=pkg.w}
+	local entity = spawnEntity(PACKAGE_PROP, vec)
+	
+	if entity then -- it got spawned
 		activePackages[i] = entity
 		return entity
 	end
 	return false
 end
 
-function spawnObjectAtPos(x,y,z,w, prop)
+function spawnEntity(ent, vec)
     local transform = Game.GetPlayer():GetWorldTransform()
-    local pos = ToVector4{x=x, y=y, z=z, w=w}
-    transform:SetPosition(pos)
+    transform:SetPosition(vec)
     transform:SetOrientation( EulerAngles.new(0,0,0):ToQuat() ) -- package angle/rotation always 0
-    return WorldFunctionalTests.SpawnEntity(prop, transform, '') -- returns ID
+    return WorldFunctionalTests.SpawnEntity(ent, transform, '') -- returns ID
 end
 
 function despawnPackage(i) -- i = package index
 	if activePackages[i] then
-		destroyObject(activePackages[i])
+		destroyEntity(activePackages[i])
 		activePackages[i] = nil
 		return true
 	end
     return false
 end
 
-function destroyObject(e)
+function destroyEntity(e)
 	if Game.FindEntityByID(e) ~= nil then
         Game.FindEntityByID(e):GetEntity():Destroy()
         return true
@@ -650,7 +651,7 @@ function checkIfPlayerNearAnyPackage()
 	local playerPos = Game.GetPlayer():GetWorldPosition() -- get player coordinates
 
 	for index,pkg in pairs(LOADED_MAP.packages) do -- iterate over loaded packages
-		if not (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg.identifier)) and (math.abs(playerPos.x - pkg.x) < 100) and (math.abs(playerPos.y - pkg.y) < 100) then
+		if not (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg.identifier)) and (math.abs(playerPos.x - pkg.x) <= 100) and (math.abs(playerPos.y - pkg.y) <= 100) then
 			checkedPkgs = checkedPkgs + 1
 			-- package is not collected AND is in the neighborhood 
 
@@ -662,9 +663,9 @@ function checkIfPlayerNearAnyPackage()
 
 			if not inVehicle() then -- player not in vehicle = package can be collected
 
-				if (d < 0.5) then -- player is practically at the package = collect it
+				if (d <= 0.5) then -- player is practically at the package = collect it
 					collectHP(index) 
-				elseif (d < 10) then -- player is very close to package = check frequently
+				elseif (d <= 10) then -- player is very close to package = check frequently
 					nextDelay = 0.1 
 				end
 
