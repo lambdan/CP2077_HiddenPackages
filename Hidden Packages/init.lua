@@ -647,27 +647,25 @@ function checkIfPlayerNearAnyPackage()
 		return
 	end
 
-	local nextDelay = 1.0
+	local nextDelay = 1.0 -- default check interval
 	local playerPos = Game.GetPlayer():GetWorldPosition() -- get player coordinates
 
-	for index,pkg in pairs(LOADED_MAP.packages) do -- iterate over loaded packages
+	for index,pkg in pairs(LOADED_MAP.packages) do -- iterate over packages in loaded map
 		if not (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg.identifier)) and (math.abs(playerPos.x - pkg.x) <= 100) and (math.abs(playerPos.y - pkg.y) <= 100) then
 			-- package is not collected AND is in the neighborhood 
-
-			if not activePackages[k] then -- package is not spawned
+			if not activePackages[index] then -- package is not spawned
 				spawnPackage(index)
 			end
 
-			local d = Vector4.Distance(playerPos, ToVector4{x=pkg.x, y=pkg.y, z=pkg.z, w=pkg.w})
-
 			if not inVehicle() then -- player not in vehicle = package can be collected
+				-- finally calculate exact distance
+				local d = Vector4.Distance(playerPos, ToVector4{x=pkg.x, y=pkg.y, z=pkg.z, w=pkg.w})
 
 				if (d <= 0.5) then -- player is practically at the package = collect it
 					collectHP(index) 
 				elseif (d <= 10) then -- player is very close to package = check frequently
 					nextDelay = 0.1 
 				end
-
 			end
 
 		elseif activePackages[index] then -- package is spawned but we're not in its neighborhood or its been collected = despawn it
