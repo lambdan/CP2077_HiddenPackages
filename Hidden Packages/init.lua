@@ -84,9 +84,6 @@ local SCANNER_SOUND_TICK = 0.0
 local RANDOM_ITEMS_POOL = {}
 local ITEM_LIST_FOLDER = "ItemLists/" -- end with a /
 
-local RESET_BUTTON_PRESSED = 0
-local STATS_REQUESTED = false
-
 registerHotkey("hp_nearest_pkg", "Mark nearest package", function()
 	markNearestPackage()
 end)
@@ -151,24 +148,7 @@ registerForEvent('onInit', function()
 			MOD_SETTINGS.MapPath = mapsPaths[value]
 			saveSettings()
 			NEED_TO_REFRESH = true
-			STATS_REQUESTED = false
-			RESET_BUTTON_PRESSED = 0
 		end)
-
-		nativeSettings.addButton("/Hidden Packages/Maps", "Show stats", "Click this button and then go in-game to see your stats for this map", "Stats", 45, function()
-			-- button is kinda wonky... maybe a bug with 1.5 and nativeSettings?
-			STATS_REQUESTED = MOD_SETTINGS.MapPath
- 		end)
-
-		nativeSettings.addButton("/Hidden Packages/Maps", "Reset progress for this map", "Reset Progress for this map. You have to press the button 10 times. You will hear a sound when you have.", "Reset Progress", 35, function()
- 			RESET_BUTTON_PRESSED = RESET_BUTTON_PRESSED + 1
- 			if RESET_BUTTON_PRESSED >= 10 then
- 				resetProgress(MOD_SETTINGS.MapPath)
- 				Game.GetAudioSystem():Play("ui_hacking_access_denied")
- 				RESET_BUTTON_PRESSED = 0
- 				NEED_TO_REFRESH = true
- 			end
- 		end)
 
 		-- sonar
 
@@ -340,21 +320,6 @@ registerForEvent('onInit', function()
 			-- remove oldest marker (Lua starts at 1)
 			unmarkPackage(SCANNER_MARKERS[1])
 			table.remove(SCANNER_MARKERS, 1)
-		end
-
-		if STATS_REQUESTED then
-			local stats_map = readMap(STATS_REQUESTED)
-			local count = countCollected(stats_map.filepath)
-			local percent = (count/stats_map.amount) * 100
-			local total_collected = 0
-			for k,v in pairs(SESSION_DATA.collectedPackageIDs) do
-				total_collected = total_collected + 1
-			end
-			local msg = "Packages collected on map \'" .. stats_map.display_name .. "\':\n" .. tostring(count) .. " / " .. tostring(stats_map.amount) .. " (" .. string.format("%.1f", percent) .. "%)"
-			msg = msg .. "\n\n" .. "Total packages collected (across all maps):\n" .. tostring(total_collected)
-			
-			STATS_REQUESTED = false
-			showCustomShardPopup("Hidden Packages Stats", msg)
 		end
 
 
@@ -914,20 +879,6 @@ function showCustomShardPopup(titel, text) -- from #cet-snippets @ discord
     shardUIevent.title = titel
     shardUIevent.text = text
     Game.GetUISystem():QueueEvent(shardUIevent)
-end
-
-function resetProgress(MapPath)
-	--print("resetting", MapPath)
-	local map = readMap(MapPath)
-
-	for k,v in pairs(map.packages) do
-		for k2,v2 in pairs(SESSION_DATA.collectedPackageIDs) do
-			if v["identifier"] == v2 then
-				--print("removing package", v["identifier"], v2)
-				table.remove(SESSION_DATA.collectedPackageIDs, k2)
-			end
-		end
-	end
 end
 
 function readItemList(ItemListPath)
