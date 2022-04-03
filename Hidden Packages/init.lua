@@ -374,7 +374,7 @@ registerForEvent('onUpdate', function(delta)
 end)
 
 function spawnPackage(i)
-	if activePackages[i] then
+	if activePackages[i] then -- package is already spawned
 		return false
 	end
 
@@ -386,6 +386,7 @@ function spawnPackage(i)
 		activePackages[i] = entity
 		return entity
 	end
+
 	return false
 end
 
@@ -396,8 +397,8 @@ function spawnEntity(ent, vec)
     return WorldFunctionalTests.SpawnEntity(ent, transform, '') -- returns ID
 end
 
-function despawnPackage(i) -- i = package index
-	if activePackages[i] then
+function despawnPackage(i)
+	if activePackages[i] then -- package is spawned
 		destroyEntity(activePackages[i])
 		activePackages[i] = nil
 		return true
