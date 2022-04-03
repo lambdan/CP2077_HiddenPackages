@@ -652,7 +652,6 @@ function checkIfPlayerNearAnyPackage()
 
 	for index,pkg in pairs(LOADED_MAP.packages) do -- iterate over loaded packages
 		if not (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg.identifier)) and (math.abs(playerPos.x - pkg.x) <= 100) and (math.abs(playerPos.y - pkg.y) <= 100) then
-			checkedPkgs = checkedPkgs + 1
 			-- package is not collected AND is in the neighborhood 
 
 			if not activePackages[k] then -- package is not spawned
