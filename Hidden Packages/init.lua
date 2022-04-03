@@ -8,6 +8,8 @@ local GameHUD = require("Modules/GameHUD.lua")
 local GameUI = require("Modules/GameUI.lua")
 local LEX = require("Modules/LuaEX.lua")
 
+local DEBUG_MODE = false -- set to true to be more verbose and log things
+
 local MAPS_FOLDER = "Maps/" -- should end with a /
 local MAP_DEFAULT = "Maps/packages1.map" -- full path to default map
 local SONAR_DEFAULT_SOUND = "ui_elevator_select"
@@ -32,15 +34,13 @@ local SONAR_SOUNDS = {
 	"ui_scanning_Stop"
 }
 
-local SETTINGS_FILE = "SETTINGS.v2.3.json"
-local MOD_SETTINGS = { -- defaults set here
-	DebugMode = false,
-	SpawnPackageRange = 100,
+local SETTINGS_FILE = "SETTINGS.v2.4.1.json"
+local MOD_SETTINGS = { -- saved in SETTINGS_FILE (separate from game save)
 	SonarEnabled = false,
 	SonarRange = 125,
 	SonarSound = SONAR_DEFAULT_SOUND,
 	SonarMinimumDelay = 0.0,
-	MoneyPerPackage = 1000, -- these defaults should also be set in the nativesettings lines
+	MoneyPerPackage = 1000,
 	StreetcredPerPackage = 100,
 	ExpPerPackage = 100,
 	PackageMultiply = false,
@@ -51,7 +51,7 @@ local MOD_SETTINGS = { -- defaults set here
 	RandomRewardItemList = false
 }
 
-local SESSION_DATA = { -- will persist
+local SESSION_DATA = { -- will persist with game saves
 	collectedPackageIDs = {}
 }
 
@@ -72,8 +72,9 @@ local isPaused = true
 local modActive = true
 local NEED_TO_REFRESH = false
 
-local lastCheck = 0
-local checkThrottle = 1
+local nextCheck = 0
+local checkStart = 0
+local checkEnd = 0
 
 local SONAR_NEXT = 0
 local SONAR_LAST = 0
@@ -111,12 +112,16 @@ registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
     reset()
 end)
 
+registerForEvent("onDraw", function() 
+	ImGui.Begin("HP perf")
+	ImGui.Text("packages in map: " .. LOADED_MAP.amount)
+	ImGui.Text("last check took: " .. tostring(checkEnd - checkStart) .. " sec")
+	ImGui.Text("(checks per second: " .. tostring(1/(checkEnd-checkStart)) .. ")")
+	ImGui.End()
+end)
+
 registerForEvent('onInit', function()
 	loadSettings()
-
-	if LEX.fileExists("DEBUG") then
-		MOD_SETTINGS.DebugMode = true
-	end
 
 	LOADED_MAP = readMap(MOD_SETTINGS.MapPath)
 
@@ -316,16 +321,6 @@ registerForEvent('onInit', function()
         	NEED_TO_REFRESH = false
         end
 
-        -- check if old legacy data exists and wipe it if so
-        if SESSION_DATA.packages then
-        	debugMsg("clearing legacy SESSION_DATA.packages")
-        	SESSION_DATA.packages = nil
-        end
-        if SESSION_DATA.locFile then
-        	debugMsg("clearing legacy SESSION_DATA.locFile")
-        	SESSION_DATA.locFile = nil
-        end
-
         checkIfPlayerNearAnyPackage() -- otherwise if you made a save near a package and just stand still it wont spawn until you move
         readItemList(MOD_SETTINGS.RandomRewardItemList) -- need to read it here in case player just started the game without changing any setting
     end)
@@ -376,9 +371,7 @@ registerForEvent('onInit', function()
 	end)
 
 	Observe('PlayerPuppet', 'OnAction', function(action)
-		if LOADED_MAP ~= nil and not isPaused and isInGame then
-			checkIfPlayerNearAnyPackage()
-		end
+		checkIfPlayerNearAnyPackage()
 	end)
 
 	GameUI.Listen('ScannerOpen', function()
@@ -534,7 +527,7 @@ function reset()
 	removeAllMappins()
 	activePackages = {}
 	activeMappins = {}
-	lastCheck = 0
+	nextCheck = 0
 	debugMsg("reset() OK")
 	return true
 end
@@ -693,66 +686,46 @@ function switchLocationsFile(path)
 end
 
 function checkIfPlayerNearAnyPackage()
-	if LOADED_MAP == nil or (isPaused == true) or (isInGame == false) then
+	if (LOADED_MAP == nil) or (isPaused == true) or (isInGame == false) or (os.clock() < nextCheck) then
+		-- no map is loaded/game is paused/game has not loaded/not time to check yet: return and do nothing
 		return
 	end
 
-	if (os.clock() - lastCheck) < checkThrottle then
-		return -- too soon
-	end
+	local nextDelay = 1.0
+	local playerPos = Game.GetPlayer():GetWorldPosition() -- get player coordinates
 
-	local nearest = nil
-	local playerPos = Game.GetPlayer():GetWorldPosition()
-	for k,v in pairs(LOADED_MAP.packages) do
-		if not (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"])) then -- no point in checking for already collected packages
-			-- this looks 100% ridiculous but in my testing it is faster than always calculating the Vector4.Distance
-			if math.abs(playerPos["x"] - v["x"]) <= MOD_SETTINGS.SpawnPackageRange then
-				if math.abs(playerPos["y"] - v["y"]) <= MOD_SETTINGS.SpawnPackageRange then
-					if math.abs(playerPos["z"] - v["z"]) <= MOD_SETTINGS.SpawnPackageRange then
+	for index,pkg in pairs(LOADED_MAP.packages) do -- iterate over loaded packages
+		if not (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg.identifier)) and (math.abs(playerPos.x - pkg.x) < 100) and (math.abs(playerPos.y - pkg.y) < 100) then
+			-- package is not collected AND is in the neighborhood 
 
-						if not activePackages[k] then -- package is not already spawned
-							spawnPackage(k)
-						end
-
-						local d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
-
-						if nearest == nil or d < nearest then
-							nearest = d
-						end
-
-						if (d <= 0.5) and (inVehicle() == false) then -- player is at package and is not in a vehicle, package should be collected
-							collectHP(k)
-							checkThrottle = 1
-						elseif d < 10 then
-							checkThrottle = 0.1
-						elseif d < 50 then
-							checkThrottle = 0.5
-						end
-
-					elseif activePackages[k] then
-						despawnPackage(k)
-					end
-				elseif activePackages[k] then
-					despawnPackage(k)
-				end
-			elseif activePackages[k] then
-				despawnPackage(k)
+			if not activePackages[k] then -- package is not spawned
+				spawnPackage(index)
 			end
-		elseif activePackages[k] then
-			despawnPackage(k)
+
+			local d = Vector4.Distance(playerPos, ToVector4{x=pkg.x, y=pkg.y, z=pkg.z, w=pkg.w})
+
+			if not inVehicle() then -- player not in vehicle = package can be collected
+
+				if (d < 0.5) then
+					collectHP(index) -- player is practically at the package = collect it
+				elseif (d < 10) then
+					nextDelay = 0.1 -- player is very close to package = check frequently
+				end
+
+			end
+
+		elseif activePackages[index] then
+			-- package is spawned but we're not in its neighborhood or its been collected = despawn it
+			despawnPackage(index)
 		end
 	end
 
-	if nearest == nil or nearest > 50 then
-		checkThrottle = 1
-	end
-
-	lastCheck = os.clock()
+	nextCheck = os.clock() + nextDelay
 end
 
 
 function debugMsg(msg)
-	if not MOD_SETTINGS.DebugMode then
+	if not DEBUG_MODE then
 		return
 	end
 
