@@ -73,8 +73,6 @@ local modActive = true
 local NEED_TO_REFRESH = false
 
 local nextCheck = 0
-local checkStart = 0
-local checkEnd = 0
 
 local SONAR_NEXT = 0
 local SONAR_LAST = 0
@@ -110,14 +108,6 @@ end)
 registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
     GameSession.TrySave()
     reset()
-end)
-
-registerForEvent("onDraw", function() 
-	ImGui.Begin("HP perf")
-	ImGui.Text("packages in map: " .. LOADED_MAP.amount)
-	ImGui.Text("last check took: " .. tostring(checkEnd - checkStart) .. " sec")
-	ImGui.Text("(checks per second: " .. tostring(1/(checkEnd-checkStart)) .. ")")
-	ImGui.End()
 end)
 
 registerForEvent('onInit', function()
@@ -696,6 +686,7 @@ function checkIfPlayerNearAnyPackage()
 
 	for index,pkg in pairs(LOADED_MAP.packages) do -- iterate over loaded packages
 		if not (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg.identifier)) and (math.abs(playerPos.x - pkg.x) < 100) and (math.abs(playerPos.y - pkg.y) < 100) then
+			checkedPkgs = checkedPkgs + 1
 			-- package is not collected AND is in the neighborhood 
 
 			if not activePackages[k] then -- package is not spawned
@@ -706,16 +697,15 @@ function checkIfPlayerNearAnyPackage()
 
 			if not inVehicle() then -- player not in vehicle = package can be collected
 
-				if (d < 0.5) then
-					collectHP(index) -- player is practically at the package = collect it
-				elseif (d < 10) then
-					nextDelay = 0.1 -- player is very close to package = check frequently
+				if (d < 0.5) then -- player is practically at the package = collect it
+					collectHP(index) 
+				elseif (d < 10) then -- player is very close to package = check frequently
+					nextDelay = 0.1 
 				end
 
 			end
 
-		elseif activePackages[index] then
-			-- package is spawned but we're not in its neighborhood or its been collected = despawn it
+		elseif activePackages[index] then -- package is spawned but we're not in its neighborhood or its been collected = despawn it
 			despawnPackage(index)
 		end
 	end
