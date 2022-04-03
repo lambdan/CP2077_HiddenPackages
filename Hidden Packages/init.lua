@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.4"
+	version = "2.4.1"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -106,21 +106,9 @@ registerHotkey("hp_toggle_mod", "Sonar/Scanner Active Quick Toggle", function()
 	end
 end)
 
--- registerForEvent("onOverlayOpen", function()
--- 	print("HP SESSION DATA:")
--- 	--print(SESSION_DATA)
--- 	for k,v in pairs(SESSION_DATA) do
--- 		print(k,v)
--- 		for k2,v2 in pairs(v) do
--- 			print(k2,v2)
--- 		end
--- 	end
--- end)
-
 registerForEvent('onShutdown', function() -- mod reload, game shutdown etc
     GameSession.TrySave()
     reset()
-    --GameSession.TrySave()
 end)
 
 registerForEvent('onInit', function()
@@ -434,57 +422,6 @@ registerForEvent('onUpdate', function(delta)
     		scanner()
     	end
     end
-
-end)
-
-registerForEvent('onDraw', function()
-
-	if MOD_SETTINGS.DebugMode then
-		ImGui.Begin("Hidden Packages - Debug")
-		--ImGui.Text("last check:" .. tostring(os.clock() - lastCheck))
-		ImGui.Text("isInGame: " .. tostring(isInGame))
-		ImGui.Text("isPaused: " .. tostring(isPaused))
-		ImGui.Text("NEED_TO_REFRESH: " .. tostring(NEED_TO_REFRESH))
-		ImGui.Text("checkThrottle: " .. tostring(checkThrottle))
-		ImGui.Text("MOD_SETTINGS.MapPath: " .. tostring(MOD_SETTINGS.MapPath))
-		ImGui.Text("SESSION_DATA.collected: " .. tostring(LEX.tableLen(SESSION_DATA.collectedPackageIDs)))
-
-		local c = 0 
-		for k,v in pairs(activePackages) do
-			if v then
-				c = c + 1
-			end
-		end
-		ImGui.Text("activePackages: " .. tostring(c))
-
-		local c = 0 
-		for k,v in pairs(activeMappins) do
-			if v then
-				c = c + 1
-			end
-		end
-		ImGui.Text("activeMappins: " .. tostring(c))
-
-		if LOADED_MAP ~= nil then
-			ImGui.Separator()
-			ImGui.Text("Collected: " .. tostring(countCollected(LOADED_MAP.filepath)) .. "/" .. tostring(LOADED_MAP.amount))
-			ImGui.Text("countCollected(): " .. tostring(countCollected(LOADED_MAP.filepath)))
-		end
-		
-		-- showing NP at all times has a huge performance impact
-		--local NP = findNearestPackageWithinRange(0)
-		--if NP then
-		--	ImGui.Text("Nearest package: " .. tostring(NP) .. " (" .. string.format("%.1f", distanceToPackage(NP)) .. "M)")
-		--end
-
-
-		ImGui.Separator()
-		if ImGui.Button("Stop Debugging") then
-			MOD_SETTINGS.DebugMode = false
-		end
-
-		ImGui.End()
-	end
 
 end)
 
