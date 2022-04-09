@@ -239,6 +239,10 @@ registerForEvent('onInit', function()
 			saveSettings()
 		end)
 
+		
+
+
+
 		-- scan ItemList folder and generate table suitable for nativeSettings
 		local itemlistPaths = {[1] = false}
 		local itemlistDisplayNames = {[1] = "Disabled"}
@@ -287,7 +291,7 @@ registerForEvent('onInit', function()
         RESET_BUTTON_PRESSED = 0
         
         if NEED_TO_REFRESH then
-        	switchLocationsFile(MOD_SETTINGS.MapPath)
+        	changeMap(MOD_SETTINGS.MapPath)
         	NEED_TO_REFRESH = false
         end
 
@@ -310,7 +314,7 @@ registerForEvent('onInit', function()
 		RESET_BUTTON_PRESSED = 0
 
         if NEED_TO_REFRESH then
-        	switchLocationsFile(MOD_SETTINGS.MapPath)
+        	changeMap(MOD_SETTINGS.MapPath)
         	readItemList(MOD_SETTINGS.RandomRewardItemList)
         	NEED_TO_REFRESH = false
         end
@@ -460,12 +464,12 @@ function collectHP(packageIndex)
 
 	if MOD_SETTINGS.RandomRewardItemList then -- will be false if Disabled
 		math.randomseed(os.time())
-		local rng = RANDOM_ITEMS_POOL[math.random(1,#RANDOM_ITEMS_POOL)]
-		local item = rng
+		local randomLine = RANDOM_ITEMS_POOL[math.random(1,#RANDOM_ITEMS_POOL)]
+		local item = randomLine
 		local amount = 1
 		
-		if string.find(rng, ",") then -- custom amount of item specified in ItemList
-			item, amount = rng:match("([^,]+),([^,]+)") -- https://stackoverflow.com/a/19269176
+		if string.find(randomLine, ",") then -- custom amount of item specified in ItemList
+			item, amount = randomLine:match("([^,]+),([^,]+)") -- split line at the ","-- https://stackoverflow.com/a/19269176
 			amount = tonumber(amount)
 		end
 
@@ -553,39 +557,6 @@ function removeAllMappins()
 	end
 end
 
-function findPackagesWithinRange(range) -- 0 = any range
-	if not isInGame	or LOADED_MAP == nil then
-		return false
-	end
-
-	local pkgs = {}
-	local distances = {}
-	local playerPos = Game.GetPlayer():GetWorldPosition()
-
-	for k,v in pairs(LOADED_MAP.packages) do
-		if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then -- package not collected
-			if range == 0 or math.abs(playerPos["x"] - v["x"]) <= range then
-				if range == 0 or math.abs(playerPos["y"] - v["y"]) <= range then
-					local d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
-					if d <= range then
-						table.insert(pkgs,k)
-						table.insert(distances,d)
-					end
-				end
-			end
-		end
-	end
-
-	if LEX.tableLen(pkgs) == 0 then
-		return false -- no packages in range
-	else
-		-- TODO sort them by closest to furthest before we return them (use the distances table!)
-		return pkgs
-	end
-end
-
-
-
 function findNearestPackageWithinRange(range) -- 0 = any range
 	if not isInGame	or LOADED_MAP == nil then
 		return false
@@ -595,16 +566,13 @@ function findNearestPackageWithinRange(range) -- 0 = any range
 	local nearestPackage = false
 	local playerPos = Game.GetPlayer():GetWorldPosition()
 
-	for k,v in pairs(LOADED_MAP.packages) do
-		if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, v["identifier"]) == false) then -- package not collected
-			if range == 0 or math.abs(playerPos["x"] - v["x"]) <= range then
-				if range == 0 or math.abs(playerPos["y"] - v["y"]) <= range then
-					local d = Vector4.Distance(playerPos, ToVector4{x=v["x"], y=v["y"], z=v["z"], w=v["w"]})
-					if nearest == nil or d < nearest then
-						nearest = d
-						nearestPackage = k
-					end
-				end
+	for key,pkg in pairs(LOADED_MAP.packages) do
+		if (LEX.tableHasValue(SESSION_DATA.collectedPackageIDs, pkg["identifier"]) == false) and ( ( math.abs(playerPos.x - pkg.x) <= range and math.abs(playerPos.y - pkg.y) <= range ) or range==0 ) then
+			-- pkg not collected and in range (or range==0)
+			local d = Vector4.Distance(playerPos, ToVector4{x=pkg.x, y=pkg.y, z=pkg.z, w=pkg.w})
+			if (nearest == nil) or (d < nearest) then
+				nearest = d
+				nearestPackage = key
 			end
 		end
 	end
@@ -625,7 +593,7 @@ function markNearestPackage()
 	return false
 end
 
-function switchLocationsFile(path)
+function changeMap(path)
 	if path == false then -- false == mod disabled
 		reset()
 		LOADED_MAP = nil
@@ -724,8 +692,6 @@ function distanceToPackage(i)
 	return Vector4.Distance(Game.GetPlayer():GetWorldPosition(), ToVector4{x=pkg["x"], y=pkg["y"], z=pkg["z"], w=pkg["w"]})
 end
 
-
-
 function saveSettings()
 	local file = io.open(SETTINGS_FILE, "w")
 	local j = json.encode(MOD_SETTINGS)
@@ -814,8 +780,6 @@ function sonar()
     local NP = findNearestPackageWithinRange(MOD_SETTINGS.SonarRange)
     if NP then
         SONAR_NEXT = SONAR_LAST + math.max((MOD_SETTINGS.SonarRange - (MOD_SETTINGS.SonarRange - distanceToPackage(NP))) / 35, 0.1)
-    --elseif MOD_SETTINGS.SonarIdlePing then --obviously this variable doesnt exist yet, so this will always evaluate to false
-    --    SONAR_NEXT = SONAR_LAST + MOD_SETTINGS.SonarRange / 35 --added this bit in the edit, you could always tack a "+ 2" or w/e to the end of that, too
     else
         return
     end
