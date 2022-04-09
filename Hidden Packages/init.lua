@@ -9,8 +9,6 @@ local GameHUD = require("Modules/GameHUD.lua")
 local GameUI = require("Modules/GameUI.lua")
 local LEX = require("Modules/LuaEX.lua")
 
-local DEBUG_MODE = false -- set to true to be more verbose and log things
-
 local MAPS_FOLDER = "Maps/" -- should end with a /
 local MAP_DEFAULT = "Maps/packages1.map" -- full path to default map
 local SONAR_DEFAULT_SOUND = "ui_elevator_select"
@@ -284,7 +282,6 @@ registerForEvent('onInit', function()
 	isInGame = Game.GetPlayer() and Game.GetPlayer():IsAttached() and not Game.GetSystemRequestsHandler():IsPreGame()
 
     GameSession.OnStart(function()
-        debugMsg('Game Session Started')
         isInGame = true
         isPaused = false
         RESET_BUTTON_PRESSED = 0
@@ -299,7 +296,6 @@ registerForEvent('onInit', function()
     end)
 
     GameSession.OnEnd(function()
-        debugMsg('Game Session Ended')
         isInGame = false
         reset()
     end)
@@ -489,7 +485,6 @@ function reset()
 	activePackages = {}
 	activeMappins = {}
 	nextCheck = 0
-	debugMsg("reset() OK")
 	return true
 end
 
@@ -643,18 +638,6 @@ function checkIfPlayerNearAnyPackage()
 	end
 
 	nextCheck = os.clock() + nextDelay
-end
-
-
-function debugMsg(msg)
-	if not DEBUG_MODE then
-		return
-	end
-
-	print("HP debug: " .. msg)
-	if isInGame then
-		HUDMessage("HP: " .. msg)
-	end
 end
 
 function HUDMessage(msg)
