@@ -1,6 +1,7 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.5"
+	version = "2.5",
+	date = "2022-04-09"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -138,7 +139,7 @@ registerForEvent('onInit', function()
 	nativeSettings = GetMod("nativeSettings")
 	if nativeSettings ~= nil then
 
-		nativeSettings.addTab("/Hidden Packages", "Hidden Packages " + tostring(HiddenPackagesMetadata.version))
+		nativeSettings.addTab("/Hidden Packages", "Hidden Packages")
 
 		-- maps
 
@@ -234,7 +235,7 @@ registerForEvent('onInit', function()
 			saveSettings()
 		end)
 
-		nativeSettings.addRangeFloat("/Hidden Packages/Rewards", "Reward Multiplier", "Multiply rewards by (how many packages you've collected X this)\n1.0 means collecting package 10 will give you 10x the rewards. 0 disables it (every package will give you 1x.)\nRandom items unaffected.", 0.0, 1.0, 0.1, "%.1f", MOD_SETTINGS.PackageMultiplier, 1.0, function(value)
+		nativeSettings.addRangeFloat("/Hidden Packages/Rewards", "Reward Multiplier", "Multiply rewards (except random items) by how many packages you've collected and this.\n(eg. 1.0 means 5th package = 5x the rewards. 0.0 disables it (every package will give you 1x))", 0.0, 2.0, 0.1, "%.1f", MOD_SETTINGS.PackageMultiplier, 1.0, function(value)
  			MOD_SETTINGS.PackageMultiplier = value
  			saveSettings()
  		end)
@@ -266,12 +267,14 @@ registerForEvent('onInit', function()
 				nsItemListCurrent = i
 			end
 		end
-		nativeSettings.addSelectorString("/Hidden Packages/Rewards", "Random Item", "Get a random item from an ItemList. ItemLists are stored in \'.../mods/Hidden Packages/ItemLists\'.", itemlistDisplayNames, nsItemListCurrent, nsItemListDefault, function(value)
+		nativeSettings.addSelectorString("/Hidden Packages/Rewards", "Random Item", "Get a random item from an ItemList for each package\nItemLists are stored in \'.../mods/Hidden Packages/ItemLists\'.", itemlistDisplayNames, nsItemListCurrent, nsItemListDefault, function(value)
 			MOD_SETTINGS.RandomRewardItemList = itemlistPaths[value]
 			RANDOM_ITEMS_POOL = {}
 			saveSettings()
 			NEED_TO_REFRESH = true
 		end)
+
+		nativeSettings.addSubcategory("/Hidden Packages/Version", HiddenPackagesMetadata.title .. " version " .. HiddenPackagesMetadata.version .. " (" .. HiddenPackagesMetadata.date .. ")")
 
 	end
 	-- end NativeSettings
@@ -425,6 +428,7 @@ function collectHP(packageIndex)
 	despawnPackage(packageIndex)
 
 	local collected = countCollected(LOADED_MAP.filepath)
+	nativeSettings.refresh()
 	
     if collected == LOADED_MAP.amount then
     	-- got all packages
