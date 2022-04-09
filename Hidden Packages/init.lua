@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.4.1"
+	version = "2.5"
 }
 
 local GameSession = require("Modules/GameSession.lua")
@@ -34,7 +34,7 @@ local SONAR_SOUNDS = {
 	"ui_scanning_Stop"
 }
 
-local SETTINGS_FILE = "SETTINGS.v2.4.1.json"
+local SETTINGS_FILE = "SETTINGS.v2.5.json"
 local MOD_SETTINGS = { -- saved in SETTINGS_FILE (separate from game save)
 	SonarEnabled = false,
 	SonarRange = 125,
@@ -43,7 +43,7 @@ local MOD_SETTINGS = { -- saved in SETTINGS_FILE (separate from game save)
 	MoneyPerPackage = 1000,
 	StreetcredPerPackage = 100,
 	ExpPerPackage = 100,
-	PackageMultiply = false,
+	PackageMultiplier = 1.0,
 	MapPath = MAP_DEFAULT,
 	ScannerEnabled = false,
 	StickyMarkers = 0,
@@ -138,7 +138,7 @@ registerForEvent('onInit', function()
 	nativeSettings = GetMod("nativeSettings")
 	if nativeSettings ~= nil then
 
-		nativeSettings.addTab("/Hidden Packages", "Hidden Packages")
+		nativeSettings.addTab("/Hidden Packages", "Hidden Packages " + tostring(HiddenPackagesMetadata.version))
 
 		-- maps
 
@@ -234,14 +234,10 @@ registerForEvent('onInit', function()
 			saveSettings()
 		end)
 
-		nativeSettings.addSwitch("/Hidden Packages/Rewards", "Multiply by Packages Collected", "Multiply rewards by how many packages you have collected", MOD_SETTINGS.PackageMultiply, false, function(state)
-			MOD_SETTINGS.PackageMultiply = state
-			saveSettings()
-		end)
-
-		
-
-
+		nativeSettings.addRangeFloat("/Hidden Packages/Rewards", "Reward Multiplier", "Multiply rewards by (how many packages you've collected X this)\n1.0 means collecting package 10 will give you 10x the rewards. 0 disables it (every package will give you 1x.)\nRandom items unaffected.", 0.0, 1.0, 0.1, "%.1f", MOD_SETTINGS.PackageMultiplier, 1.0, function(value)
+ 			MOD_SETTINGS.PackageMultiplier = value
+ 			saveSettings()
+ 		end)
 
 		-- scan ItemList folder and generate table suitable for nativeSettings
 		local itemlistPaths = {[1] = false}
@@ -443,8 +439,8 @@ function collectHP(packageIndex)
     end	
 
 	local multiplier = 1
-	if MOD_SETTINGS.PackageMultiply then
-		multiplier = collected
+	if MOD_SETTINGS.PackageMultiplier > 0 then
+		multiplier = MOD_SETTINGS.PackageMultiplier * collected
 	end
 
 	local money_reward = MOD_SETTINGS.MoneyPerPackage * multiplier
