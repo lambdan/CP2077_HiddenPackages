@@ -1,6 +1,6 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.5.1",
+	version = "2.5.1a",
 	date = "2025-02-09"
 }
 
