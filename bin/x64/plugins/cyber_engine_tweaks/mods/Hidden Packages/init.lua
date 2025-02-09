@@ -450,12 +450,18 @@ function collectHP(packageIndex)
 
 	local sc_reward = MOD_SETTINGS.StreetcredPerPackage * multiplier
 	if sc_reward > 0 then
-		Game.AddExp("StreetCred", sc_reward)
+		local pdd = PlayerDevelopmentSystem.GetData(Game.GetPlayer())
+		pdd:AddExperience(sc_reward, "StreetCred", 0, false)
+		print("[HiddenPackages]", sc_reward, "experience added to StreetCred")
+		print("MOD_SETTINGS.StreetcredPerPackage=", MOD_SETTINGS.StreetcredPerPackage)
 	end
 
 	local xp_reward = MOD_SETTINGS.ExpPerPackage * multiplier
 	if xp_reward > 0 then
-		Game.AddExp("Level", xp_reward)
+		local pdd = PlayerDevelopmentSystem.GetData(Game.GetPlayer())
+		pdd:AddExperience(xp_reward, "Level", 0, false)
+		print("[HiddenPackages]", xp_reward, "experience added to Level")
+		print("MOD_SETTINGS.ExpPerPackage=", MOD_SETTINGS.ExpPerPackage)
 	end
 
 	if MOD_SETTINGS.RandomRewardItemList then -- will be false if Disabled
