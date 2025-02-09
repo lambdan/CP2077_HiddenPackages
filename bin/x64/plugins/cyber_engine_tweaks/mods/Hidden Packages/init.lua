@@ -1,7 +1,7 @@
 local HiddenPackagesMetadata = {
 	title = "Hidden Packages",
-	version = "2.5",
-	date = "2022-04-09"
+	version = "2.5.1",
+	date = "2025-02-09"
 }
 
 local GameSession = require("Modules/GameSession.lua")
